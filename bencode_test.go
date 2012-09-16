@@ -190,7 +190,7 @@ func checkUnmarshal(expected string, data any) (err error) {
 	dataValue := reflect.ValueOf(data)
 	newOne := reflect.New(reflect.TypeOf(data))
 	buf := bytes.NewBufferString(expected)
-	if err = UnmarshalValue(buf, newOne); err != nil {
+	if err = unmarshalValue(buf, newOne); err != nil {
 		return
 	}
 	if err = checkFuzzyEqualValue(dataValue, newOne.Elem()); err != nil {

@@ -226,7 +226,7 @@ func (b *structBuilder) Key(k string) Builder {
 	return nobuilder
 }
 
-// Unmarshal parses the bencode syntax string s and fills in
+// Unmarshal reads and parses the bencode syntax data from r and fills in
 // an arbitrary struct or slice pointed at by val.
 // It uses the reflect package to assign to fields
 // and arrays embedded in val.  Well-formed data that does not fit
@@ -249,9 +249,9 @@ func (b *structBuilder) Key(k string) Builder {
 //
 // unmarshalling the bencode syntax string
 //
-//	d5:emailld5:where4:home4:addr15:gre@example.come\
+//	"d5:emailld5:where4:home4:addr15:gre@example.come\
 //  d5:where4:work4:addr12:gre@work.comee4:name14:Gr\
-//  ace R. Emlin7:address15:123 Main Streete
+//  ace R. Emlin7:address15:123 Main Streete"
 //
 // via Unmarshal(s, &r) is equivalent to assigning
 //
@@ -277,7 +277,6 @@ func (b *structBuilder) Key(k string) Builder {
 // To unmarshal a top-level bencode array, pass in a pointer to an empty
 // slice of the correct type.
 //
-
 func Unmarshal(r io.Reader, val interface{}) (err error) {
 	// If e represents a value, the answer won't get back to the
 	// caller.  Make sure it's a pointer.
@@ -285,14 +284,11 @@ func Unmarshal(r io.Reader, val interface{}) (err error) {
 		err = errors.New("Attempt to unmarshal into a non-pointer")
 		return
 	}
-	err = UnmarshalValue(r, reflect.Indirect(reflect.ValueOf(val)))
+	err = unmarshalValue(r, reflect.Indirect(reflect.ValueOf(val)))
 	return
 }
 
-// This API is public primarily to make testing easier, but it is available if you
-// have a use for it.
-
-func UnmarshalValue(r io.Reader, v reflect.Value) (err error) {
+func unmarshalValue(r io.Reader, v reflect.Value) (err error) {
 	var b *structBuilder
 
 	// XXX: Decide if the extra codnitions are needed. Affect map?
@@ -306,7 +302,7 @@ func UnmarshalValue(r io.Reader, v reflect.Value) (err error) {
 		b = &structBuilder{val: v}
 	}
 
-	err = Parse(r, b)
+	err = parse(r, b)
 	return
 }
 
@@ -479,6 +475,46 @@ func isValueNil(val reflect.Value) bool {
 	return false
 }
 
+// Marshal writes the bencode encoding of val to w.
+//
+// Marshal traverses the value v recursively.
+//
+// Marshal uses the following type-dependent encodings:
+//
+// Floating point, integer, and Number values encode as bencode numbers.
+//
+// String values encode as bencode strings.
+//
+// Array and slice values encode as bencode arrays.
+//
+// Struct values encode as bencode maps. Each exported struct field
+// becomes a member of the object.
+// The object's default key string is the struct field name
+// but can be specified in the struct field's tag value. The "json" key in
+// the struct field's tag value is the key name, followed by an optional comma
+// and options. Examples:
+//
+//   // Field appears in bencode as key "Field".
+//   Field int
+//
+//   // Field appears in bencode as key "myName".
+//   Field int "myName"
+//
+// Anonymous struct fields are ignored.
+//
+// Map values encode as bencode objects.
+// The map's key type must be string; the object keys are used directly
+// as map keys.
+//
+// Boolean, Pointer, Interface, Channel, complex, and function values cannot
+// be encoded in bencode.
+// Attempting to encode such a value causes Marshal to return
+// a MarshalError.
+//
+// Bencode cannot represent cyclic data structures and Marshal does not
+// handle them.  Passing cyclic structures to Marshal will result in
+// an infinite recursion.
+//
 func Marshal(w io.Writer, val interface{}) error {
 	return writeValue(w, reflect.ValueOf(val))
 }

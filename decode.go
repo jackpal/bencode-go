@@ -20,10 +20,10 @@ import (
 // elements may in turn contain any of the types listed above and so on.
 //
 // If Decode encounters a syntax error, it returns with err set to an
-// instance of ParseError.  See ParseError documentation for details.
+// instance of Error.
 func Decode(r io.Reader) (data interface{}, err error) {
 	jb := newDecoder(nil, nil)
-	err = Parse(r, jb)
+	err = parse(r, jb)
 	if err == nil {
 		data = jb.Copy()
 	}

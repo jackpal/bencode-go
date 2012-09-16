@@ -103,7 +103,7 @@ func decodeString(r Reader) (data string, err error) {
 	return
 }
 
-func parse(r Reader, build Builder) (err error) {
+func parseFromReader(r Reader, build Builder) (err error) {
 	c, err := r.ReadByte()
 	if err != nil {
 		goto exit
@@ -185,7 +185,7 @@ func parse(r Reader, build Builder) (err error) {
 			if err != nil {
 				goto exit
 			}
-			err = parse(r, build.Elem(n))
+			err = parseFromReader(r, build.Elem(n))
 			if err != nil {
 				goto exit
 			}
@@ -201,10 +201,10 @@ exit:
 
 // Parse parses the bencode stream and makes calls to
 // the builder to construct a parsed representation.
-func Parse(r io.Reader, builder Builder) (err error) {
+func parse(r io.Reader, builder Builder) (err error) {
 	rr, ok := r.(Reader)
 	if !ok {
 		rr = bufio.NewReader(r)
 	}
-	return parse(rr, builder)
+	return parseFromReader(rr, builder)
 }
