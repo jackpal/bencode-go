@@ -145,7 +145,7 @@ func (b *structBuilder) Array() {
 	}
 }
 
-func (b *structBuilder) Elem(i int) Builder {
+func (b *structBuilder) Elem(i int) builder {
 	if b == nil || i < 0 {
 		return nobuilder
 	}
@@ -194,7 +194,7 @@ func (b *structBuilder) Map() {
 	}
 }
 
-func (b *structBuilder) Key(k string) Builder {
+func (b *structBuilder) Key(k string) builder {
 	if b == nil {
 		return nobuilder
 	}
@@ -332,22 +332,22 @@ func writeArrayOrSlice(w io.Writer, val reflect.Value) (err error) {
 	return nil
 }
 
-type StringValue struct {
+type stringValue struct {
 	key   string
 	value reflect.Value
 }
 
-type StringValueArray []StringValue
+type stringValueArray []stringValue
 
 // Satisfy sort.Interface
 
-func (a StringValueArray) Len() int { return len(a) }
+func (a stringValueArray) Len() int { return len(a) }
 
-func (a StringValueArray) Less(i, j int) bool { return a[i].key < a[j].key }
+func (a stringValueArray) Less(i, j int) bool { return a[i].key < a[j].key }
 
-func (a StringValueArray) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a stringValueArray) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
-func writeSVList(w io.Writer, svList StringValueArray) (err error) {
+func writeSVList(w io.Writer, svList stringValueArray) (err error) {
 	sort.Sort(svList)
 
 	for _, sv := range svList {
@@ -381,7 +381,7 @@ func writeMap(w io.Writer, val reflect.Value) (err error) {
 
 	// Sort keys
 
-	svList := make(StringValueArray, len(keys))
+	svList := make(stringValueArray, len(keys))
 	for i, key := range keys {
 		svList[i].key = key.String()
 		svList[i].value = val.MapIndex(key)
@@ -408,7 +408,7 @@ func writeStruct(w io.Writer, val reflect.Value) (err error) {
 	typ := val.Type()
 
 	numFields := val.NumField()
-	svList := make(StringValueArray, numFields)
+	svList := make(stringValueArray, numFields)
 
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)

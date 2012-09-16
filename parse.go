@@ -18,8 +18,8 @@ import (
 // Parser
 //
 // Implements parsing but not the actions.  Those are
-// carried out by the implementation of the Builder interface.
-// A Builder represents the object being created.
+// carried out by the implementation of the builder interface.
+// A builder represents the object being created.
 // Calling a method like Int64(i) sets that object to i.
 // Calling a method like Elem(i) or Key(s) creates a
 // new builder for a subpiece of the object (logically,
@@ -32,10 +32,10 @@ import (
 // nested data structure, using the "map keys"
 // as struct field names.
 
-// A Builder is an interface implemented by clients and passed
+// A builder is an interface implemented by clients and passed
 // to the bencode parser.  It gives clients full control over the
 // eventual representation returned by the parser.
-type Builder interface {
+type builder interface {
 	// Set value
 	Int64(i int64)
 	Uint64(i uint64)
@@ -44,10 +44,10 @@ type Builder interface {
 	Map()
 
 	// Create sub-Builders
-	Elem(i int) Builder
-	Key(s string) Builder
+	Elem(i int) builder
+	Key(s string) builder
 
-	// Flush changes to parent Builder if necessary.
+	// Flush changes to parent builder if necessary.
 	Flush()
 }
 
@@ -97,7 +97,7 @@ func decodeString(r *bufio.Reader) (data string, err error) {
 	return
 }
 
-func parseFromReader(r *bufio.Reader, build Builder) (err error) {
+func parseFromReader(r *bufio.Reader, build builder) (err error) {
 	c, err := r.ReadByte()
 	if err != nil {
 		goto exit
@@ -195,6 +195,6 @@ exit:
 
 // Parse parses the bencode stream and makes calls to
 // the builder to construct a parsed representation.
-func parse(r io.Reader, builder Builder) (err error) {
+func parse(r io.Reader, builder builder) (err error) {
 	return parseFromReader(bufio.NewReader(r), builder)
 }

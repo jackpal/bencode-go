@@ -60,7 +60,7 @@ func (j *decoder) Array() { j.value = make([]interface{}, 0, 8) }
 
 func (j *decoder) Map() { j.value = make(map[string]interface{}) }
 
-func (j *decoder) Elem(i int) Builder {
+func (j *decoder) Elem(i int) builder {
 	v, ok := j.value.([]interface{})
 	if !ok {
 		v = make([]interface{}, 0, 8)
@@ -80,7 +80,7 @@ func (j *decoder) Elem(i int) Builder {
 	return newDecoder(v, i)
 }
 
-func (j *decoder) Key(s string) Builder {
+func (j *decoder) Key(s string) builder {
 	m, ok := j.value.(map[string]interface{})
 	if !ok {
 		m = make(map[string]interface{})
