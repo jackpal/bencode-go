@@ -490,9 +490,8 @@ func isValueNil(val reflect.Value) bool {
 // Struct values encode as bencode maps. Each exported struct field
 // becomes a member of the object.
 // The object's default key string is the struct field name
-// but can be specified in the struct field's tag value. The "json" key in
-// the struct field's tag value is the key name, followed by an optional comma
-// and options. Examples:
+// but can be specified in the struct field's tag value. The text of
+// the struct field's tag value is the key name. Examples:
 //
 //   // Field appears in bencode as key "Field".
 //   Field int
