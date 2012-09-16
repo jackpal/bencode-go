@@ -15,12 +15,6 @@ import (
 	"strconv"
 )
 
-type Reader interface {
-	io.Reader
-	ReadByte() (c byte, err error)
-	UnreadByte() error
-}
-
 // Parser
 //
 // Implements parsing but not the actions.  Those are
@@ -57,7 +51,7 @@ type Builder interface {
 	Flush()
 }
 
-func collectInt(r Reader, delim byte) (buf []byte, err error) {
+func collectInt(r *bufio.Reader, delim byte) (buf []byte, err error) {
 	for {
 		var c byte
 		c, err = r.ReadByte()
@@ -76,7 +70,7 @@ func collectInt(r Reader, delim byte) (buf []byte, err error) {
 	return
 }
 
-func decodeInt64(r Reader, delim byte) (data int64, err error) {
+func decodeInt64(r *bufio.Reader, delim byte) (data int64, err error) {
 	buf, err := collectInt(r, delim)
 	if err != nil {
 		return
@@ -85,7 +79,7 @@ func decodeInt64(r Reader, delim byte) (data int64, err error) {
 	return
 }
 
-func decodeString(r Reader) (data string, err error) {
+func decodeString(r *bufio.Reader) (data string, err error) {
 	length, err := decodeInt64(r, ':')
 	if err != nil {
 		return
@@ -103,7 +97,7 @@ func decodeString(r Reader) (data string, err error) {
 	return
 }
 
-func parseFromReader(r Reader, build Builder) (err error) {
+func parseFromReader(r *bufio.Reader, build Builder) (err error) {
 	c, err := r.ReadByte()
 	if err != nil {
 		goto exit
@@ -202,9 +196,5 @@ exit:
 // Parse parses the bencode stream and makes calls to
 // the builder to construct a parsed representation.
 func parse(r io.Reader, builder Builder) (err error) {
-	rr, ok := r.(Reader)
-	if !ok {
-		rr = bufio.NewReader(r)
-	}
-	return parseFromReader(rr, builder)
+	return parseFromReader(bufio.NewReader(r), builder)
 }
