@@ -228,6 +228,14 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+func BenchmarkDecodeAll(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		for _, sv := range decodeTests {
+			check(sv.s, sv.v)
+		}
+	}
+}
+
 type structA struct {
 	A int    "a"
 	B string `example:"data" bencode:"b"`
@@ -265,6 +273,14 @@ func TestUnmarshal(t *testing.T) {
 	for _, sv := range unmarshalTests {
 		if err := checkUnmarshal(sv.s, sv.v); err != nil {
 			t.Error(err.Error())
+		}
+	}
+}
+
+func BenchmarkUnmarshalAll(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		for _, sv := range unmarshalTests {
+			checkUnmarshal(sv.s, sv.v)
 		}
 	}
 }
