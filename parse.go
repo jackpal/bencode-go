@@ -138,7 +138,7 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 				goto exit
 			}
 			// TODO: in pendantic mode, check for keys in ascending order.
-			err = parse(r, build.Key(key))
+			err = parseFromReader(r, build.Key(key))
 			if err != nil {
 				goto exit
 			}
