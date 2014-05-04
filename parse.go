@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"sync"
 )
 
 // Parser
@@ -196,5 +197,18 @@ exit:
 // Parse parses the bencode stream and makes calls to
 // the builder to construct a parsed representation.
 func parse(r io.Reader, builder builder) (err error) {
-	return parseFromReader(bufio.NewReader(r), builder)
+	buf := newBufioReader(r)
+	defer bufioReaderPool.Put(buf)
+	return parseFromReader(buf, builder)
+}
+
+var bufioReaderPool sync.Pool
+
+func newBufioReader(r io.Reader) *bufio.Reader {
+	if v := bufioReaderPool.Get(); v != nil {
+		br := v.(*bufio.Reader)
+		br.Reset(r)
+		return br
+	}
+	return bufio.NewReader(r)
 }
