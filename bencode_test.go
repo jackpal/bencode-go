@@ -229,7 +229,7 @@ func TestDecode(t *testing.T) {
 
 type structA struct {
 	A int    "a"
-	B string "b"
+	B string `example:"data" bencode:"b"`
 }
 
 func TestUnmarshal(t *testing.T) {

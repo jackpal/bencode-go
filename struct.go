@@ -205,7 +205,8 @@ func (b *structBuilder) Key(k string) builder {
 		k = strings.ToLower(k)
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
-			if strings.ToLower(string(field.Tag)) == k ||
+			key := bencodeKey(field)
+			if strings.ToLower(key) == k ||
 				strings.ToLower(field.Name) == k {
 				return &structBuilder{val: v.Field(i)}
 			}
@@ -273,6 +274,10 @@ func (b *structBuilder) Key(k string) builder {
 //
 // If you provide a tag string for a struct member, the tag string
 // will be used as the bencode dictionary key for that member.
+// Bencode undestands both the original single-string and updated
+// list-of-key-value-pairs tag string syntax. The list-of-key-value
+// pairs syntax is assumed, with a fallback to the original single-string
+// syntax. The key for bencode values is bencode.
 //
 // To unmarshal a top-level bencode array, pass in a pointer to an empty
 // slice of the correct type.
@@ -399,6 +404,24 @@ func writeMap(w io.Writer, val reflect.Value) (err error) {
 	return
 }
 
+func bencodeKey(field reflect.StructField) (key string) {
+	key = field.Name
+	tag := field.Tag
+	if len(tag) > 0 {
+		// Backwards compatability
+		// If there's a bencode key/value entry in the tag, use it.
+		key = tag.Get("bencode")
+		if len(key) == 0 {
+			// If there is no ":" in the tag, assume it is an old-style tag.
+			stringTag := string(tag)
+			if !strings.Contains(stringTag, ":") {
+				key = stringTag
+			}
+		}
+	}
+	return
+}
+
 func writeStruct(w io.Writer, val reflect.Value) (err error) {
 	_, err = fmt.Fprint(w, "d")
 	if err != nil {
@@ -412,11 +435,7 @@ func writeStruct(w io.Writer, val reflect.Value) (err error) {
 
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
-		key := field.Name
-		if len(field.Tag) > 0 {
-			key = string(field.Tag)
-		}
-		svList[i].key = key
+		svList[i].key = bencodeKey(field)
 		svList[i].value = val.Field(i)
 	}
 
