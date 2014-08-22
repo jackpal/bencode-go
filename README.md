@@ -18,12 +18,12 @@ Import the package
 Decode a bencode stream
 -----------------------
 
-   data, err := bencode.Decode(reader)
+    data, err := bencode.Decode(reader)
 
 Encode an object into a bencode stream
 --------------------------------------
 
-   err := bencode.Marshal(writer, data)
+    err := bencode.Marshal(writer, data)
 
 Complete documentation
 ----------------------
