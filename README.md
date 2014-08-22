@@ -28,7 +28,7 @@ Encode an object into a bencode stream
 Complete documentation
 ----------------------
 
-http://go.pkgdoc.org/github.com/jackpal/bencode-go
+http://godoc.org/github.com/jackpal/bencode-go
 
 License
 -------
