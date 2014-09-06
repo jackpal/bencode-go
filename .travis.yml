@@ -1,0 +1,13 @@
+language: go
+
+go:
+  - 1.3
+  - tip
+
+allowed_failures:
+  - go: tip
+
+install:
+  - go get -d -v . && go install -v .
+
+script: go test -v .
