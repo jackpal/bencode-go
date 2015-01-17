@@ -1,7 +1,7 @@
 bencode-go
 ==========
 
-A Go language binding for encodeing and decoding data in the bencode format that
+A Go language binding for encoding and decoding data in the bencode format that
 is used by the BitTorrent peer-to-peer file sharing protocol.
 
 Quick Start
