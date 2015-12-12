@@ -16,6 +16,12 @@ Import the package
 
     import bencode "github.com/jackpal/bencode-go"
 
+Unmarshal a bencode stream into an object
+-----------------------------------------
+   data := myAwesomeObject{}
+
+   err := bencode.Unmarshal(reader, &data)
+
 Decode a bencode stream
 -----------------------
 
