@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
 	"reflect"
 	"sort"
 	"strings"
@@ -436,7 +435,14 @@ func writeStruct(w io.Writer, val reflect.Value) (err error) {
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
 		svList[i].key = bencodeKey(field)
-		svList[i].value = val.Field(i)
+		// The tag `bencode:"-"` should mean that this field must be ignored
+		// See https://golang.org/pkg/encoding/json/#Marshal or https://golang.org/pkg/encoding/xml/#Marshal
+		// We set a zero value so that it is ignored by the writeSVList() function
+		if svList[i].key == "-" {
+			svList[i].value = reflect.Value{}
+		} else {
+			svList[i].value = val.Field(i)
+		}
 	}
 
 	err = writeSVList(w, svList)

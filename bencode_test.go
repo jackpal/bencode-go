@@ -284,3 +284,36 @@ func BenchmarkUnmarshalAll(b *testing.B) {
 		}
 	}
 }
+
+type identity struct {
+	Age       int
+	FirstName string
+	Ignored   string `bencode:"-"`
+	LastName  string
+}
+
+func TestMarshalWithIgnoredField(t *testing.T) {
+	id := identity{42, "Jack", "Why are you ignoring me?", "Daniel"}
+	var buf bytes.Buffer
+	err := Marshal(&buf, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var id2 identity
+	err = Unmarshal(&buf, &id2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Age != id2.Age {
+		t.Fatal("Age should be the same, expected %d, got %d", id.Age, id2.Age)
+	}
+	if id.FirstName != id2.FirstName {
+		t.Fatal("FirstName should be the same, expected %s, got %s", id.FirstName, id2.FirstName)
+	}
+	if id.LastName != id2.LastName {
+		t.Fatal("LastName should be the same, expected %s, got %s", id.LastName, id2.LastName)
+	}
+	if id2.Ignored != "" {
+		t.Fatal("Ignored should be empty, got %s", id2.Ignored)
+	}
+}
