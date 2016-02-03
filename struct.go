@@ -413,11 +413,8 @@ func bencodeKey(field reflect.StructField, sv *stringValue) (key string) {
 		var tagOpt tagOptions
 		key, tagOpt = parseTag(tag.Get("bencode"))
 		if len(key) == 0 {
-			// If there is no ":" in the tag, assume it is an old-style tag.
-			stringTag := string(tag)
-			if !strings.Contains(stringTag, ":") {
-				key = stringTag
-			}
+			// Breaks backwards compatibility to allow this syntax `bencode:,omitempty`
+			key = field.Name
 		}
 		if sv != nil && tagOpt.Contains("omitempty") {
 			sv.omitEmpty = true

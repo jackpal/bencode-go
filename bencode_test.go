@@ -237,16 +237,16 @@ func BenchmarkDecodeAll(b *testing.B) {
 }
 
 type structA struct {
-	A int    "a"
+	A int    `bencode:"a"`
 	B string `example:"data" bencode:"b"`
 	C string `example:"data2" bencode:"sea monster"`
 }
 
 type structNested struct {
-	T string            "t"
-	Y string            "y"
-	Q string            "q"
-	A map[string]string "a"
+	T string            `bencode:"t"`
+	Y string            `bencode:"y"`
+	Q string            `bencode:"q"`
+	A map[string]string `bencode:"a"`
 }
 
 var (
@@ -335,6 +335,19 @@ func TestMarshalWithOmitEmptyFieldEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf2 := "d3:Agei42e9:FirstName4:Jack8:LastName6:Daniele"
+	if string(buf.Bytes()) != buf2 {
+		t.Fatalf("Wrong encoding, expected first line got second line\n`%s`\n`%s`\n", buf2, string(buf.Bytes()))
+	}
+}
+
+func TestMarshalWithOmitEmptyFieldNonEmpty(t *testing.T) {
+	oe := omitEmpty{42, []string{"first", "second"}, "Jack", "Not ignored", "Daniel", "Whisky"}
+	var buf bytes.Buffer
+	err := Marshal(&buf, oe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf2 := "d3:Agei42e5:Arrayl5:first6:seconde9:FirstName4:Jack7:Ignored11:Not ignored8:LastName6:Daniel9:otherName6:Whiskye"
 	if string(buf.Bytes()) != buf2 {
 		t.Fatalf("Wrong encoding, expected first line got second line\n`%s`\n`%s`\n", buf2, string(buf.Bytes()))
 	}
