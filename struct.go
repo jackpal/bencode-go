@@ -204,7 +204,7 @@ func (b *structBuilder) Key(k string) builder {
 		k = strings.ToLower(k)
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
-			key := bencodeKey(field)
+			key := bencodeKey(field, nil)
 			if strings.ToLower(key) == k ||
 				strings.ToLower(field.Name) == k {
 				return &structBuilder{val: v.Field(i)}
@@ -337,8 +337,9 @@ func writeArrayOrSlice(w io.Writer, val reflect.Value) (err error) {
 }
 
 type stringValue struct {
-	key   string
-	value reflect.Value
+	key       string
+	value     reflect.Value
+	omitEmpty bool
 }
 
 type stringValueArray []stringValue
@@ -355,7 +356,7 @@ func writeSVList(w io.Writer, svList stringValueArray) (err error) {
 	sort.Sort(svList)
 
 	for _, sv := range svList {
-		if isValueNil(sv.value) {
+		if sv.isValueNil() {
 			continue // Skip null values
 		}
 		s := sv.key
@@ -403,13 +404,14 @@ func writeMap(w io.Writer, val reflect.Value) (err error) {
 	return
 }
 
-func bencodeKey(field reflect.StructField) (key string) {
+func bencodeKey(field reflect.StructField, sv *stringValue) (key string) {
 	key = field.Name
 	tag := field.Tag
 	if len(tag) > 0 {
 		// Backwards compatability
 		// If there's a bencode key/value entry in the tag, use it.
-		key = tag.Get("bencode")
+		var tagOpt tagOptions
+		key, tagOpt = parseTag(tag.Get("bencode"))
 		if len(key) == 0 {
 			// If there is no ":" in the tag, assume it is an old-style tag.
 			stringTag := string(tag)
@@ -417,8 +419,49 @@ func bencodeKey(field reflect.StructField) (key string) {
 				key = stringTag
 			}
 		}
+		if sv != nil && tagOpt.Contains("omitempty") {
+			sv.omitEmpty = true
+		}
+	}
+	if sv != nil {
+		sv.key = key
 	}
 	return
+}
+
+// tagOptions is the string following a comma in a struct field's "bencode"
+// tag, or the empty string. It does not include the leading comma.
+type tagOptions string
+
+// parseTag splits a struct field's bencode tag into its name and
+// comma-separated options.
+func parseTag(tag string) (string, tagOptions) {
+	if idx := strings.Index(tag, ","); idx != -1 {
+		return tag[:idx], tagOptions(tag[idx+1:])
+	}
+	return tag, tagOptions("")
+}
+
+// Contains reports whether a comma-separated list of options
+// contains a particular substr flag. substr must be surrounded by a
+// string boundary or commas.
+func (o tagOptions) Contains(optionName string) bool {
+	if len(o) == 0 {
+		return false
+	}
+	s := string(o)
+	for s != "" {
+		var next string
+		i := strings.Index(s, ",")
+		if i >= 0 {
+			s, next = s[:i], s[i+1:]
+		}
+		if s == optionName {
+			return true
+		}
+		s = next
+	}
+	return false
 }
 
 func writeStruct(w io.Writer, val reflect.Value) (err error) {
@@ -434,7 +477,7 @@ func writeStruct(w io.Writer, val reflect.Value) (err error) {
 
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
-		svList[i].key = bencodeKey(field)
+		bencodeKey(field, &svList[i])
 		// The tag `bencode:"-"` should mean that this field must be ignored
 		// See https://golang.org/pkg/encoding/json/#Marshal or https://golang.org/pkg/encoding/xml/#Marshal
 		// We set a zero value so that it is ignored by the writeSVList() function
@@ -487,15 +530,31 @@ func writeValue(w io.Writer, val reflect.Value) (err error) {
 	return
 }
 
-func isValueNil(val reflect.Value) bool {
-	if !val.IsValid() {
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Ptr:
+		return v.IsNil()
+	}
+	return false
+}
+
+func (sv stringValue) isValueNil() bool {
+	if !sv.value.IsValid() || (sv.omitEmpty && isEmptyValue(sv.value)) {
 		return true
 	}
-	switch v := val; v.Kind() {
+	switch v := sv.value; v.Kind() {
 	case reflect.Interface:
-		return isValueNil(v.Elem())
-	default:
-		return false
+		return !v.Elem().IsValid()
 	}
 	return false
 }

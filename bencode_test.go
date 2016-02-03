@@ -317,3 +317,25 @@ func TestMarshalWithIgnoredField(t *testing.T) {
 		t.Fatal("Ignored should be empty, got %s", id2.Ignored)
 	}
 }
+
+type omitEmpty struct {
+	Age       int
+	Array     []string `bencode:",omitempty"`
+	FirstName string
+	Ignored   string `bencode:",omitempty"`
+	LastName  string
+	Renamed   string `bencode:"otherName,omitempty"`
+}
+
+func TestMarshalWithOmitEmptyFieldEmpty(t *testing.T) {
+	oe := omitEmpty{42, []string{}, "Jack", "", "Daniel", ""}
+	var buf bytes.Buffer
+	err := Marshal(&buf, oe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf2 := "d3:Agei42e9:FirstName4:Jack8:LastName6:Daniele"
+	if string(buf.Bytes()) != buf2 {
+		t.Fatalf("Wrong encoding, expected first line got second line\n`%s`\n`%s`\n", buf2, string(buf.Bytes()))
+	}
+}
