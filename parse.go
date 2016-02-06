@@ -40,6 +40,7 @@ type builder interface {
 	// Set value
 	Int64(i int64)
 	Uint64(i uint64)
+	Float64(f float64)
 	String(s string)
 	Array()
 	Map()
@@ -62,8 +63,8 @@ func collectInt(r *bufio.Reader, delim byte) (buf []byte, err error) {
 		if c == delim {
 			return
 		}
-		if !(c == '-' || (c >= '0' && c <= '9')) {
-			err = errors.New("expected digit")
+		if !(c == '-' || c == '.' || c == '+' || c == 'E' || (c >= '0' && c <= '9')) {
+			err = errors.New("Unexpected character in Integer")
 			return
 		}
 		buf = append(buf, c)
@@ -154,12 +155,15 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 		var str string
 		var i int64
 		var i2 uint64
+		var f float64
 		str = string(buf)
 		// If the number is exactly an integer, use that.
 		if i, err = strconv.ParseInt(str, 10, 64); err == nil {
 			build.Int64(i)
 		} else if i2, err = strconv.ParseUint(str, 10, 64); err == nil {
 			build.Uint64(i2)
+		} else if f, err = strconv.ParseFloat(str, 64); err == nil {
+			build.Float64(f)
 		} else {
 			err = errors.New("Bad integer")
 		}

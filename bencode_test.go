@@ -184,9 +184,6 @@ func fuzzyEqualValue(a, b reflect.Value) bool {
 }
 
 func checkUnmarshal(expected string, data any) (err error) {
-	if err = checkMarshal(expected, data); err != nil {
-		return
-	}
 	dataValue := reflect.ValueOf(data)
 	newOne := reflect.New(reflect.TypeOf(data))
 	buf := bytes.NewBufferString(expected)
@@ -255,6 +252,16 @@ var (
 	unmarshalTests            = []SVPair{
 		SVPair{"i100e", 100},
 		SVPair{"i-100e", -100},
+		SVPair{"i7.5e", 7},
+		SVPair{"i-7.5e", -7},
+		SVPair{"i7.574E+2e", 757},
+		SVPair{"i-7.574E+2e", -757},
+		SVPair{"i7.574E+20e", -9223372036854775808},
+		SVPair{"i-7.574E+20e", -9223372036854775808},
+		SVPair{"i7.574E-2e", 0},
+		SVPair{"i-7.574E-2e", 0},
+		SVPair{"i7.574E-20e", 0},
+		SVPair{"i-7.574E-20e", 0},
 		SVPair{"1:a", "a"},
 		SVPair{"2:a\"", "a\""},
 		SVPair{"11:0123456789a", "0123456789a"},
