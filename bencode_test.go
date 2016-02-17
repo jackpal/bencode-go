@@ -291,3 +291,71 @@ func BenchmarkUnmarshalAll(b *testing.B) {
 		}
 	}
 }
+
+type identity struct {
+	Age       int
+	FirstName string
+	Ignored   string `bencode:"-"`
+	LastName  string
+}
+
+func TestMarshalWithIgnoredField(t *testing.T) {
+	id := identity{42, "Jack", "Why are you ignoring me?", "Daniel"}
+	var buf bytes.Buffer
+	err := Marshal(&buf, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var id2 identity
+	err = Unmarshal(&buf, &id2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Age != id2.Age {
+		t.Fatal("Age should be the same, expected %d, got %d", id.Age, id2.Age)
+	}
+	if id.FirstName != id2.FirstName {
+		t.Fatal("FirstName should be the same, expected %s, got %s", id.FirstName, id2.FirstName)
+	}
+	if id.LastName != id2.LastName {
+		t.Fatal("LastName should be the same, expected %s, got %s", id.LastName, id2.LastName)
+	}
+	if id2.Ignored != "" {
+		t.Fatal("Ignored should be empty, got %s", id2.Ignored)
+	}
+}
+
+type omitEmpty struct {
+	Age       int
+	Array     []string `bencode:",omitempty"`
+	FirstName string
+	Ignored   string `bencode:",omitempty"`
+	LastName  string
+	Renamed   string `bencode:"otherName,omitempty"`
+}
+
+func TestMarshalWithOmitEmptyFieldEmpty(t *testing.T) {
+	oe := omitEmpty{42, []string{}, "Jack", "", "Daniel", ""}
+	var buf bytes.Buffer
+	err := Marshal(&buf, oe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf2 := "d3:Agei42e9:FirstName4:Jack8:LastName6:Daniele"
+	if string(buf.Bytes()) != buf2 {
+		t.Fatalf("Wrong encoding, expected first line got second line\n`%s`\n`%s`\n", buf2, string(buf.Bytes()))
+	}
+}
+
+func TestMarshalWithOmitEmptyFieldNonEmpty(t *testing.T) {
+	oe := omitEmpty{42, []string{"first", "second"}, "Jack", "Not ignored", "Daniel", "Whisky"}
+	var buf bytes.Buffer
+	err := Marshal(&buf, oe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf2 := "d3:Agei42e5:Arrayl5:first6:seconde9:FirstName4:Jack7:Ignored11:Not ignored8:LastName6:Daniel9:otherName6:Whiskye"
+	if string(buf.Bytes()) != buf2 {
+		t.Fatalf("Wrong encoding, expected first line got second line\n`%s`\n`%s`\n", buf2, string(buf.Bytes()))
+	}
+}
