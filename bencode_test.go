@@ -62,8 +62,6 @@ func fuzzyEqualInt64(a int64, b reflect.Value) bool {
 	switch vb := b; vb.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return a == (vb.Int())
-	default:
-		return false
 	}
 	return false
 }
@@ -74,8 +72,6 @@ func fuzzyEqualArrayOrSlice(va reflect.Value, b reflect.Value) bool {
 		return fuzzyEqualArrayOrSlice2(va, vb)
 	case reflect.Slice:
 		return fuzzyEqualArrayOrSlice2(va, vb)
-	default:
-		return false
 	}
 	return false
 }
@@ -177,8 +173,6 @@ func fuzzyEqualValue(a, b reflect.Value) bool {
 		default:
 			return false
 		}
-	default:
-		return false
 	}
 	return false
 }
