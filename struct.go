@@ -519,7 +519,14 @@ func writeValue(w io.Writer, val reflect.Value) (err error) {
 	case reflect.Array:
 		err = writeArrayOrSlice(w, v)
 	case reflect.Slice:
-		err = writeArrayOrSlice(w, v)
+		switch val.Type().String() {
+		case "[]uint8":
+			// special case as byte-string
+			s := string(v.Bytes())
+			_, err = fmt.Fprintf(w, "%d:%s", len(s), s)
+		default:
+			err = writeArrayOrSlice(w, v)
+		}
 	case reflect.Map:
 		err = writeMap(w, v)
 	case reflect.Struct:
