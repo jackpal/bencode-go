@@ -17,7 +17,7 @@ func checkMarshal(expected string, data any) (err error) {
 	}
 	s := b.String()
 	if expected != s {
-		err = errors.New(fmt.Sprintf("Expected %s got %s", expected, s))
+		err = fmt.Errorf("Expected %s got %s", expected, s)
 		return
 	}
 	return
