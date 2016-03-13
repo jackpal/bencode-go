@@ -312,16 +312,16 @@ func TestMarshalWithIgnoredField(t *testing.T) {
 		t.Fatal(err)
 	}
 	if id.Age != id2.Age {
-		t.Fatal("Age should be the same, expected %d, got %d", id.Age, id2.Age)
+		t.Fatalf("Age should be the same, expected %d, got %d", id.Age, id2.Age)
 	}
 	if id.FirstName != id2.FirstName {
-		t.Fatal("FirstName should be the same, expected %s, got %s", id.FirstName, id2.FirstName)
+		t.Fatalf("FirstName should be the same, expected %s, got %s", id.FirstName, id2.FirstName)
 	}
 	if id.LastName != id2.LastName {
-		t.Fatal("LastName should be the same, expected %s, got %s", id.LastName, id2.LastName)
+		t.Fatalf("LastName should be the same, expected %s, got %s", id.LastName, id2.LastName)
 	}
 	if id2.Ignored != "" {
-		t.Fatal("Ignored should be empty, got %s", id2.Ignored)
+		t.Fatalf("Ignored should be empty, got %s", id2.Ignored)
 	}
 }
 
