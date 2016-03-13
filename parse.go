@@ -69,7 +69,6 @@ func collectInt(r *bufio.Reader, delim byte) (buf []byte, err error) {
 		}
 		buf = append(buf, c)
 	}
-	return
 }
 
 func decodeInt64(r *bufio.Reader, delim byte) (data int64, err error) {
