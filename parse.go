@@ -190,7 +190,7 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 			n++
 		}
 	default:
-		err = errors.New(fmt.Sprintf("Unexpected character: '%v'", c))
+		err = fmt.Errorf("Unexpected character: '%v'", c)
 	}
 exit:
 	build.Flush()
