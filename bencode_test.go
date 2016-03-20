@@ -359,3 +359,18 @@ func TestMarshalWithOmitEmptyFieldNonEmpty(t *testing.T) {
 		t.Fatalf("Wrong encoding, expected first line got second line\n`%s`\n`%s`\n", buf2, string(buf.Bytes()))
 	}
 }
+
+func TestMatshalDifferentTypes(t *testing.T) {
+
+	buf := new(bytes.Buffer)
+	Marshal(buf, []byte{'1', '2', '3'})
+	if buf.String() != "3:123" {
+		t.Fatalf("Incorrectly encoded byte array, got %s", buf.String())
+	}
+
+	buf = new(bytes.Buffer)
+	Marshal(buf, []int{1, 2, 3})
+	if buf.String() != "li1ei2ei3ee" {
+		t.Fatalf("Incorrectly encoded byte array, got %s", buf.String())
+	}
+}
