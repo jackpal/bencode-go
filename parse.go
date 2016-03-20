@@ -69,7 +69,6 @@ func collectInt(r *bufio.Reader, delim byte) (buf []byte, err error) {
 		}
 		buf = append(buf, c)
 	}
-	return
 }
 
 func decodeInt64(r *bufio.Reader, delim byte) (data int64, err error) {
@@ -191,7 +190,7 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 			n++
 		}
 	default:
-		err = errors.New(fmt.Sprintf("Unexpected character: '%v'", c))
+		err = fmt.Errorf("Unexpected character: '%v'", c)
 	}
 exit:
 	build.Flush()
