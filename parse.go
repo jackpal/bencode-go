@@ -53,7 +53,12 @@ type builder interface {
 	Flush()
 }
 
-func collectInt(r *bufio.Reader, delim byte) (buf []byte, err error) {
+type Reader interface {
+	io.Reader
+	io.ByteScanner
+}
+
+func collectInt(r Reader, delim byte) (buf []byte, err error) {
 	for {
 		var c byte
 		c, err = r.ReadByte()
@@ -71,7 +76,7 @@ func collectInt(r *bufio.Reader, delim byte) (buf []byte, err error) {
 	}
 }
 
-func decodeInt64(r *bufio.Reader, delim byte) (data int64, err error) {
+func decodeInt64(r Reader, delim byte) (data int64, err error) {
 	buf, err := collectInt(r, delim)
 	if err != nil {
 		return
@@ -80,7 +85,7 @@ func decodeInt64(r *bufio.Reader, delim byte) (data int64, err error) {
 	return
 }
 
-func decodeString(r *bufio.Reader) (data string, err error) {
+func decodeString(r Reader) (data string, err error) {
 	length, err := decodeInt64(r, ':')
 	if err != nil {
 		return
@@ -98,7 +103,7 @@ func decodeString(r *bufio.Reader) (data string, err error) {
 	return
 }
 
-func parseFromReader(r *bufio.Reader, build builder) (err error) {
+func parseFromReader(r Reader, build builder) (err error) {
 	c, err := r.ReadByte()
 	if err != nil {
 		goto exit
@@ -199,10 +204,16 @@ exit:
 
 // Parse parses the bencode stream and makes calls to
 // the builder to construct a parsed representation.
-func parse(r io.Reader, builder builder) (err error) {
-	buf := newBufioReader(r)
-	defer bufioReaderPool.Put(buf)
-	return parseFromReader(buf, builder)
+func parse(reader io.Reader, builder builder) (err error) {
+	// Check to see if the reader already fulfills the bencode.Reader interface.
+	// Wrap it in a bufio.Reader if it doesn't.
+	r, ok := reader.(Reader)
+	if !ok {
+		r = newBufioReader(reader)
+		defer bufioReaderPool.Put(r)
+	}
+
+	return parseFromReader(r, builder)
 }
 
 var bufioReaderPool sync.Pool

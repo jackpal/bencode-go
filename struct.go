@@ -281,7 +281,7 @@ func (b *structBuilder) Key(k string) builder {
 // To unmarshal a top-level bencode array, pass in a pointer to an empty
 // slice of the correct type.
 //
-func Unmarshal(r io.Reader, val interface{}) (err error) {
+func Unmarshal(r Reader, val interface{}) (err error) {
 	// If e represents a value, the answer won't get back to the
 	// caller.  Make sure it's a pointer.
 	if reflect.TypeOf(val).Kind() != reflect.Ptr {
@@ -292,7 +292,7 @@ func Unmarshal(r io.Reader, val interface{}) (err error) {
 	return
 }
 
-func unmarshalValue(r io.Reader, v reflect.Value) (err error) {
+func unmarshalValue(r Reader, v reflect.Value) (err error) {
 	var b *structBuilder
 
 	// XXX: Decide if the extra codnitions are needed. Affect map?
