@@ -354,7 +354,7 @@ func TestMarshalWithOmitEmptyFieldNonEmpty(t *testing.T) {
 	}
 }
 
-func TestMatshalDifferentTypes(t *testing.T) {
+func TestMarshalDifferentTypes(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 	Marshal(buf, []byte{'1', '2', '3'})
