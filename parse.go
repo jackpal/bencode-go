@@ -53,31 +53,24 @@ type builder interface {
 	Flush()
 }
 
+// Deprecated: This type is currently unused. It is exposed for backwards
+// compatability. The public API that previously used this type,
+//
+//    Unmarshal(r Reader, val interface{}) (err error)
+//
+// is now
+//
+//    Unmarshal(r io.Reader, val interface{}) (err error)
+//
+// Which is compatible, since any Reader is also an io.Reader.
+// Clients should drop their use of this type. It may be removed in the future.
 type Reader interface {
 	io.Reader
 	io.ByteScanner
 }
 
-func collectInt(r Reader, delim byte) (buf []byte, err error) {
-	for {
-		var c byte
-		c, err = r.ReadByte()
-		if err != nil {
-			return
-		}
-		if c == delim {
-			return
-		}
-		if !(c == '-' || c == '.' || c == '+' || c == 'E' || (c >= '0' && c <= '9')) {
-			err = errors.New("Unexpected character in Integer")
-			return
-		}
-		buf = append(buf, c)
-	}
-}
-
-func decodeInt64(r Reader, delim byte) (data int64, err error) {
-	buf, err := collectInt(r, delim)
+func decodeInt64(r *bufio.Reader, delim byte) (data int64, err error) {
+	buf, err := readSlice(r, delim)
 	if err != nil {
 		return
 	}
@@ -85,7 +78,21 @@ func decodeInt64(r Reader, delim byte) (data int64, err error) {
 	return
 }
 
-func decodeString(r Reader) (data string, err error) {
+// Read bytes up until delim, return slice without delimiter byte.
+func readSlice(r *bufio.Reader, delim byte) (data []byte, err error) {
+	if data, err = r.ReadSlice(delim); err != nil {
+		return
+	}
+	lenData := len(data)
+	if lenData > 0 {
+		data = data[:lenData-1]
+	} else {
+		panic("bad r.ReadSlice() length")
+	}
+	return
+}
+
+func decodeString(r *bufio.Reader) (data string, err error) {
 	length, err := decodeInt64(r, ':')
 	if err != nil {
 		return
@@ -94,8 +101,16 @@ func decodeString(r Reader) (data string, err error) {
 		err = errors.New("Bad string length")
 		return
 	}
+
+	// Can we peek that much data out of r?
+	if peekBuf, peekErr := r.Peek(int(length)); peekErr == nil {
+		data = string(peekBuf)
+		_, err = r.Discard(int(length))
+		return
+	}
+
 	var buf = make([]byte, length)
-	_, err = io.ReadFull(r, buf)
+	_, err = readFull(r, buf)
 	if err != nil {
 		return
 	}
@@ -103,7 +118,30 @@ func decodeString(r Reader) (data string, err error) {
 	return
 }
 
-func parseFromReader(r Reader, build builder) (err error) {
+// Like io.ReadFull, but takes a bufio.Reader.
+func readFull(r *bufio.Reader, buf []byte) (n int, err error) {
+	return readAtLeast(r, buf, len(buf))
+}
+
+// Like io.ReadAtLeast, but takes a bufio.Reader.
+func readAtLeast(r *bufio.Reader, buf []byte, min int) (n int, err error) {
+	if len(buf) < min {
+		return 0, io.ErrShortBuffer
+	}
+	for n < min && err == nil {
+		var nn int
+		nn, err = r.Read(buf[n:])
+		n += nn
+	}
+	if n >= min {
+		err = nil
+	} else if n > 0 && err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return
+}
+
+func parseFromReader(r *bufio.Reader, build builder) (err error) {
 	c, err := r.ReadByte()
 	if err != nil {
 		goto exit
@@ -152,7 +190,7 @@ func parseFromReader(r Reader, build builder) (err error) {
 
 	case c == 'i':
 		var buf []byte
-		buf, err = collectInt(r, 'e')
+		buf, err = readSlice(r, 'e')
 		if err != nil {
 			goto exit
 		}
@@ -205,9 +243,9 @@ exit:
 // Parse parses the bencode stream and makes calls to
 // the builder to construct a parsed representation.
 func parse(reader io.Reader, builder builder) (err error) {
-	// Check to see if the reader already fulfills the bencode.Reader interface.
+	// Check to see if the reader already fulfills the bufio.Reader interface.
 	// Wrap it in a bufio.Reader if it doesn't.
-	r, ok := reader.(Reader)
+	r, ok := reader.(*bufio.Reader)
 	if !ok {
 		r = newBufioReader(reader)
 		defer bufioReaderPool.Put(r)
