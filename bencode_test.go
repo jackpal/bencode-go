@@ -250,7 +250,9 @@ var (
 		SVPair{"i-7.5e", -7},
 		SVPair{"i7.574E+2e", 757},
 		SVPair{"i-7.574E+2e", -757},
-		SVPair{"i7.574E+20e", -9223372036854775808},
+		// This test is architecture specific.
+		// See https://stackoverflow.com/a/70259392
+		// SVPair{"i7.574E+20e", -9223372036854775808},
 		SVPair{"i-7.574E+20e", -9223372036854775808},
 		SVPair{"i7.574E-2e", 0},
 		SVPair{"i-7.574E-2e", 0},
