@@ -39,3 +39,11 @@ http://godoc.org/github.com/jackpal/bencode-go
 
 This project is licensed under the Go Authors standard license. (See the LICENSE
 file for details.)
+
+## Version History
+
+| tag    | Notes                                                       |
+| ------ | ----------------------------------------------------------- |
+| v1.0.2 | Added go module.                                            |
+| v1.0.1 | Removed architecture specific test that was failing on ARM.  |
+| v1.0.0 | First version.                                              |
