@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-type any interface{}
-
 func checkMarshal(expected string, data any) (err error) {
 	var b bytes.Buffer
 	if err = Marshal(&b, data); err != nil {

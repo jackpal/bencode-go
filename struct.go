@@ -281,7 +281,7 @@ func (b *structBuilder) Key(k string) builder {
 // To unmarshal a top-level bencode array, pass in a pointer to an empty
 // slice of the correct type.
 //
-func Unmarshal(r io.Reader, val interface{}) (err error) {
+func Unmarshal(r io.Reader, val any) (err error) {
 	// If e represents a value, the answer won't get back to the
 	// caller.  Make sure it's a pointer.
 	if reflect.TypeOf(val).Kind() != reflect.Ptr {
@@ -607,6 +607,6 @@ func (sv stringValue) isValueNil() bool {
 // handle them.  Passing cyclic structures to Marshal will result in
 // an infinite recursion.
 //
-func Marshal(w io.Writer, val interface{}) error {
+func Marshal(w io.Writer, val any) error {
 	return writeValue(w, reflect.ValueOf(val))
 }

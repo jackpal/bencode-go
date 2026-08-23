@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-var marshalTestData = map[string]interface{}{
+var marshalTestData = map[string]any{
 	"announce": []byte("udp://tracker.publicbt.com:80/announce"),
-	"announce-list": []interface{}{
-		[]interface{}{[]byte("udp://tracker.publicbt.com:80/announce")},
-		[]interface{}{[]byte("udp://tracker.openbittorrent.com:80/announce")},
+	"announce-list": []any{
+		[]any{[]byte("udp://tracker.publicbt.com:80/announce")},
+		[]any{[]byte("udp://tracker.openbittorrent.com:80/announce")},
 	},
 	"comment": []byte("Debian CD from cdimage.debian.org"),
-	"info": map[string]interface{}{
+	"info": map[string]any{
 		"name":         []byte("debian-8.8.0-arm64-netinst.iso"),
 		"length":       170917888,
 		"piece length": 262144,

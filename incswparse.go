@@ -17,7 +17,7 @@ import (
 // (a) Uses a bufio.Reader rather than a raw []byte
 // (b) Strings are returned as golang strings rather than as raw []byte arrays.
 
-func decodeFromReader(r *bufio.Reader) (data interface{}, err error) {
+func decodeFromReader(r *bufio.Reader) (data any, err error) {
     result, err := unmarshal(r)
     if err != nil {
         return nil, err
@@ -26,7 +26,7 @@ func decodeFromReader(r *bufio.Reader) (data interface{}, err error) {
     return result, nil
 }
 
-func unmarshal(data *bufio.Reader) (interface{}, error) {
+func unmarshal(data *bufio.Reader) (any, error) {
     ch, err := data.ReadByte()
     if err != nil {
         return nil, err
@@ -47,7 +47,7 @@ func unmarshal(data *bufio.Reader) (interface{}, error) {
         return integer, nil
 
     case 'l':
-        list := []interface{}{}
+        list := []any{}
         for {
             c, err2 := data.ReadByte()
             if err2 == nil {
@@ -67,7 +67,7 @@ func unmarshal(data *bufio.Reader) (interface{}, error) {
         }
 
     case 'd':
-        dictionary := map[string]interface{}{}
+        dictionary := map[string]any{}
         for {
             c, err2 := data.ReadByte()
             if err2 == nil {
