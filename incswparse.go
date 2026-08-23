@@ -4,6 +4,8 @@ import (
     "bufio"
     "bytes"
     "errors"
+    "fmt"
+    "io"
     "strconv"
 )
 
@@ -105,12 +107,19 @@ func unmarshal(data *bufio.Reader) (interface{}, error) {
         if err != nil {
             return nil, err
         }
+        if stringLength < 0 {
+            return nil, fmt.Errorf("bad string length: %d", stringLength)
+        }
 
-        buf := make([]byte, stringLength)
+        var buf bytes.Buffer
+        if _, err = io.CopyN(&buf, data, stringLength); err != nil {
+            if err == io.EOF {
+                err = io.ErrUnexpectedEOF
+            }
+            return nil, err
+        }
 
-        _, err = readAtLeast(data, buf, int(stringLength))
-
-        return string(buf), err
+        return buf.String(), nil
     }
 }
 
