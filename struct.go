@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -52,7 +53,7 @@ func setint(val reflect.Value, i int64) {
 	case reflect.Interface:
 		v.Set(reflect.ValueOf(i))
 	default:
-		panic("setint called for bogus type: " + val.Kind().String())
+		// Ignore mismatched types gracefully without panicking.
 	}
 }
 
@@ -160,6 +161,10 @@ func (b *structBuilder) Elem(i int) builder {
 				n = 8
 			}
 			for n <= i {
+				if n > (math.MaxInt / 2) {
+					n = i + 1
+					break
+				}
 				n *= 2
 			}
 			nv := reflect.MakeSlice(v.Type(), v.Len(), n)
@@ -281,18 +286,11 @@ func (b *structBuilder) Key(k string) builder {
 // To unmarshal a top-level bencode array, pass in a pointer to an empty
 // slice of the correct type.
 //
-func Unmarshal(r io.Reader, val any) (err error) {
-	// If e represents a value, the answer won't get back to the
-	// caller.  Make sure it's a pointer.
-	if reflect.TypeOf(val).Kind() != reflect.Ptr {
-		err = errors.New("Attempt to unmarshal into a non-pointer")
-		return
-	}
-	err = unmarshalValue(r, reflect.Indirect(reflect.ValueOf(val)))
-	return
+func unmarshalValue(r io.Reader, v reflect.Value) (err error) {
+	return unmarshalValueWithState(r, v, &decodeState{opts: DefaultOptions()})
 }
 
-func unmarshalValue(r io.Reader, v reflect.Value) (err error) {
+func unmarshalValueWithState(r io.Reader, v reflect.Value, state *decodeState) (err error) {
 	var b *structBuilder
 
 	// XXX: Decide if the extra codnitions are needed. Affect map?
@@ -306,7 +304,7 @@ func unmarshalValue(r io.Reader, v reflect.Value) (err error) {
 		b = &structBuilder{val: v}
 	}
 
-	err = parse(r, b)
+	err = parse(r, b, state)
 	return
 }
 

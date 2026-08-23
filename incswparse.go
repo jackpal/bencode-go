@@ -1,140 +1,152 @@
 package bencode
 
 import (
-    "bufio"
-    "bytes"
-    "errors"
-    "fmt"
-    "io"
-    "strconv"
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
+	"strconv"
 )
 
 // A relatively fast unmarshaler.
 // Adapted from https://github.com/IncSW/go-bencode/blob/master/unmarshaler.go
 // License: https://github.com/IncSW/go-bencode/blob/master/LICENSE
 
-// Differences from IncSW are for compatibility with the existing bencode-go API:
-// (a) Uses a bufio.Reader rather than a raw []byte
-// (b) Strings are returned as golang strings rather than as raw []byte arrays.
-
-func decodeFromReader(r *bufio.Reader) (data any, err error) {
-    result, err := unmarshal(r)
-    if err != nil {
-        return nil, err
-    }
-
-    return result, nil
+func (s *decodeState) decode(data *bufio.Reader) (any, error) {
+	return s.unmarshal(data)
 }
 
-func unmarshal(data *bufio.Reader) (any, error) {
-    ch, err := data.ReadByte()
-    if err != nil {
-        return nil, err
-    }
-    switch ch {
-    case 'i':
-        integerBuffer, err := optimisticReadBytes(data, 'e')
-        if err != nil {
-            return nil, err
-        }
-        integerBuffer = integerBuffer[:len(integerBuffer)-1]
+func (s *decodeState) unmarshal(data *bufio.Reader) (any, error) {
+	if err := s.incElement(); err != nil {
+		return nil, err
+	}
+	ch, err := data.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	switch ch {
+	case 'i':
+		integerBuffer, err := readNumBytes(data, 'e')
+		if err != nil {
+			return nil, err
+		}
+		if s.opts.Strict {
+			if err := validateStrictInteger(integerBuffer); err != nil {
+				return nil, err
+			}
+		}
+		integer, err := strconv.ParseInt(string(integerBuffer), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("bencode: invalid integer %q: %w", string(integerBuffer), err)
+		}
+		return integer, nil
 
-        integer, err := strconv.ParseInt(string(integerBuffer), 10, 64)
-        if err != nil {
-            return nil, err
-        }
+	case 'l':
+		if err := s.incDepth(); err != nil {
+			return nil, err
+		}
+		defer s.decDepth()
 
-        return integer, nil
+		list := []any{}
+		for {
+			c, err2 := data.ReadByte()
+			if err2 != nil {
+				return nil, err2
+			}
+			if c == 'e' {
+				return list, nil
+			}
+			data.UnreadByte()
 
-    case 'l':
-        list := []any{}
-        for {
-            c, err2 := data.ReadByte()
-            if err2 == nil {
-                if c == 'e' {
-                    return list, nil
-                } else {
-                    data.UnreadByte()
-                }
-            }
+			value, err := s.unmarshal(data)
+			if err != nil {
+				return nil, err
+			}
 
-            value, err := unmarshal(data)
-            if err != nil {
-                return nil, err
-            }
+			list = append(list, value)
+		}
 
-            list = append(list, value)
-        }
+	case 'd':
+		if err := s.incDepth(); err != nil {
+			return nil, err
+		}
+		defer s.decDepth()
 
-    case 'd':
-        dictionary := map[string]any{}
-        for {
-            c, err2 := data.ReadByte()
-            if err2 == nil {
-                if c == 'e' {
-                    return dictionary, nil
-                } else {
-                    data.UnreadByte()
-                }
-            }
-            value, err := unmarshal(data)
-            if err != nil {
-                return nil, err
-            }
+		dictionary := map[string]any{}
+		var lastKey string
+		var hasLastKey bool
 
-            key, ok := value.(string)
-            if !ok {
-                return nil, errors.New("bencode: non-string dictionary key")
-            }
+		for {
+			c, err2 := data.ReadByte()
+			if err2 != nil {
+				return nil, err2
+			}
+			if c == 'e' {
+				return dictionary, nil
+			}
+			data.UnreadByte()
 
-            value, err = unmarshal(data)
-            if err != nil {
-                return nil, err
-            }
+			keyVal, err := s.unmarshal(data)
+			if err != nil {
+				return nil, err
+			}
 
-            dictionary[key] = value
-        }
+			key, ok := keyVal.(string)
+			if !ok {
+				return nil, errors.New("bencode: non-string dictionary key")
+			}
 
-    default:
-        data.UnreadByte()
-        stringLengthBuffer, err := optimisticReadBytes(data, ':')
-        if err != nil {
-            return nil, err
-        }
-        stringLengthBuffer = stringLengthBuffer[:len(stringLengthBuffer)-1]
+			if s.opts.Strict {
+				if hasLastKey {
+					if key == lastKey {
+						return nil, fmt.Errorf("bencode: duplicate dictionary key %q", key)
+					}
+					if key < lastKey {
+						return nil, fmt.Errorf("bencode: dictionary keys not in ascending order: %q followed by %q", lastKey, key)
+					}
+				}
+				lastKey = key
+				hasLastKey = true
+			}
 
-        stringLength, err := strconv.ParseInt(string(stringLengthBuffer), 10, 64)
-        if err != nil {
-            return nil, err
-        }
-        if stringLength < 0 {
-            return nil, fmt.Errorf("bad string length: %d", stringLength)
-        }
+			value, err := s.unmarshal(data)
+			if err != nil {
+				return nil, err
+			}
 
-        var buf bytes.Buffer
-        if _, err = io.CopyN(&buf, data, stringLength); err != nil {
-            if err == io.EOF {
-                err = io.ErrUnexpectedEOF
-            }
-            return nil, err
-        }
+			dictionary[key] = value
+		}
 
-        return buf.String(), nil
-    }
-}
+	default:
+		data.UnreadByte()
+		lenBuf, err := readNumBytes(data, ':')
+		if err != nil {
+			return nil, err
+		}
+		if s.opts.Strict {
+			if err := validateStrictStringLength(lenBuf); err != nil {
+				return nil, err
+			}
+		}
+		stringLength, err := strconv.ParseInt(string(lenBuf), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("bencode: invalid string length %q: %w", string(lenBuf), err)
+		}
+		if err := s.checkStringLength(stringLength); err != nil {
+			return nil, err
+		}
 
-// Reads bytes out of local buffer if possible, which avoids an extra copy.
-// The result []byte is only guarenteed to be valid until the next call to a Read method.
-func optimisticReadBytes(data *bufio.Reader, delim byte) ([]byte, error) {
-    buffered := data.Buffered()
-    var buffer []byte
-    var err error
-    if buffer, err = data.Peek(buffered); err != nil {
-        return nil, err
-    }
+		if peekBuf, peekErr := data.Peek(int(stringLength)); peekErr == nil {
+			str := string(peekBuf)
+			_, err = data.Discard(int(stringLength))
+			return str, err
+		}
 
-    if i := bytes.IndexByte(buffer, delim); i >= 0 {
-        return data.ReadSlice(delim)
-    }
-    return data.ReadBytes(delim)
+		var buf = make([]byte, stringLength)
+		if _, err = io.ReadFull(data, buf); err != nil {
+			return nil, err
+		}
+
+		return string(buf), nil
+	}
 }

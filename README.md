@@ -26,6 +26,17 @@ err := bencode.Unmarshal(reader, &data)
 data, err := bencode.Decode(reader)
 ```
 
+### Decode with configurable limits or strict validation
+```go
+dec := bencode.NewDecoder(reader).
+	SetMaxStringLength(10 * 1024 * 1024). // 10 MiB
+	SetMaxDepth(50).
+	SetStrict(true) // Enforces BEP 3 rules (no leading zeros, sorted keys, etc.)
+
+data, err := dec.Decode()
+// or: err := dec.Unmarshal(&myObject)
+```
+
 ### Encode an object into a bencode stream
 ```go
 err := bencode.Marshal(writer, data)
@@ -42,8 +53,9 @@ file for details.)
 
 ## Version History
 
-| tag    | Notes                                                       |
-| ------ | ----------------------------------------------------------- |
-| v1.0.2 | Added go module.                                            |
-| v1.0.1 | Removed architecture specific test that was failing on ARM.  |
-| v1.0.0 | First version.                                              |
+| tag    | Notes                                                                           |
+| ------ | ------------------------------------------------------------------------------- |
+| v1.1.0 | Added Decoder with configurable resource limits, strict BEP 3 validation, and `any` types. |
+| v1.0.2 | Added go module.                                                                |
+| v1.0.1 | Removed architecture specific test that was failing on ARM.                      |
+| v1.0.0 | First version.                                                                  |

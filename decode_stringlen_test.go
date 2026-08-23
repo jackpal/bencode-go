@@ -34,3 +34,228 @@ func TestDecodeStringRoundTrip(t *testing.T) {
 		t.Errorf("Decode = %q, want %q", got, "hello")
 	}
 }
+
+func TestMaxStringLength(t *testing.T) {
+	input := "10:0123456789"
+
+	// Default limit is 64MB, so 10 bytes succeeds
+	val, err := Decode(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != "0123456789" {
+		t.Fatalf("expected 0123456789, got %v", val)
+	}
+
+	// Set limit to 5 bytes
+	dec := NewDecoder(strings.NewReader(input)).SetMaxStringLength(5)
+	_, err = dec.Decode()
+	if err == nil {
+		t.Fatal("expected error for string length exceeding limit, got nil")
+	}
+	if !strings.Contains(err.Error(), "string length 10 exceeds limit of 5 bytes") {
+		t.Fatalf("error message missing limit info: %v", err)
+	}
+
+	// Test with Unmarshal
+	var dest string
+	dec = NewDecoder(strings.NewReader(input)).SetMaxStringLength(5)
+	err = dec.Unmarshal(&dest)
+	if err == nil {
+		t.Fatal("expected error for string length exceeding limit in Unmarshal, got nil")
+	}
+	if !strings.Contains(err.Error(), "string length 10 exceeds limit of 5 bytes") {
+		t.Fatalf("error message missing limit info: %v", err)
+	}
+}
+
+func TestMaxDepth(t *testing.T) {
+	// Nested list with depth 5: l l l l l i1e e e e e e
+	input := "llllli1eeeeee"
+
+	// Decode with max depth 3
+	opts := DefaultOptions()
+	opts.MaxDepth = 3
+	_, err := DecodeWithOptions(strings.NewReader(input), opts)
+	if err == nil {
+		t.Fatal("expected depth limit error, got nil")
+	}
+	if !strings.Contains(err.Error(), "nesting depth 4 exceeds max depth limit of 3") {
+		t.Fatalf("error message missing depth info: %v", err)
+	}
+
+	// Decode with max depth 10
+	opts.MaxDepth = 10
+	val, err := DecodeWithOptions(strings.NewReader(input), opts)
+	if err != nil {
+		t.Fatalf("unexpected error with depth 10: %v", err)
+	}
+	if val == nil {
+		t.Fatal("expected non-nil decoded value")
+	}
+
+	// Test with Unmarshal
+	type nestedList [][][][][]int
+	var nl nestedList
+	err = UnmarshalWithOptions(strings.NewReader(input), &nl, Options{MaxDepth: 3, MaxStringLength: -1, MaxElements: -1})
+	if err == nil {
+		t.Fatal("expected depth limit error in Unmarshal, got nil")
+	}
+	if !strings.Contains(err.Error(), "nesting depth 4 exceeds max depth limit of 3") {
+		t.Fatalf("error message missing depth info: %v", err)
+	}
+}
+
+func TestMaxElements(t *testing.T) {
+	input := "li1ei2ei3ei4ei5ee"
+
+	dec := NewDecoder(strings.NewReader(input)).SetMaxElements(3)
+	_, err := dec.Decode()
+	if err == nil {
+		t.Fatal("expected element limit error, got nil")
+	}
+	if !strings.Contains(err.Error(), "element count 4 exceeds max elements limit of 3") {
+		t.Fatalf("error message missing element limit info: %v", err)
+	}
+
+	// With limit 10
+	dec = NewDecoder(strings.NewReader(input)).SetMaxElements(10)
+	val, err := dec.Decode()
+	if err != nil {
+		t.Fatalf("unexpected error with elements limit 10: %v", err)
+	}
+	slice, ok := val.([]any)
+	if !ok || len(slice) != 5 {
+		t.Fatalf("expected slice of length 5, got %v", val)
+	}
+}
+
+func TestStrictIntegerValidation(t *testing.T) {
+	tests := []struct {
+		input       string
+		wantErrPart string
+	}{
+		{"i03e", "leading zeros not allowed in strict mode"},
+		{"i-0e", "negative zero not allowed in strict mode"},
+		{"i-03e", "negative zero not allowed in strict mode"},
+		{"i+5e", "positive sign not allowed in strict mode"},
+		{"i7.5e", "non-digit character in strict mode"},
+		{"ie", "empty value in strict mode"},
+	}
+
+	for _, tc := range tests {
+		opts := DefaultOptions()
+		opts.Strict = true
+		_, err := DecodeWithOptions(strings.NewReader(tc.input), opts)
+		if err == nil {
+			t.Errorf("DecodeWithOptions(%q, Strict=true) = nil error, want error containing %q", tc.input, tc.wantErrPart)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.wantErrPart) {
+			t.Errorf("DecodeWithOptions(%q, Strict=true) error %q does not contain %q", tc.input, err.Error(), tc.wantErrPart)
+		}
+
+		// Also test with Unmarshal
+		var i int64
+		err = UnmarshalWithOptions(strings.NewReader(tc.input), &i, opts)
+		if err == nil {
+			t.Errorf("UnmarshalWithOptions(%q, Strict=true) = nil error, want error containing %q", tc.input, tc.wantErrPart)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.wantErrPart) {
+			t.Errorf("UnmarshalWithOptions(%q, Strict=true) error %q does not contain %q", tc.input, err.Error(), tc.wantErrPart)
+		}
+	}
+}
+
+func TestStrictStringLengthValidation(t *testing.T) {
+	tests := []struct {
+		input       string
+		wantErrPart string
+	}{
+		{"03:abc", "leading zeros not allowed in strict mode"},
+		{"+3:abc", "sign not allowed in strict mode"},
+		{"-1:abc", "sign not allowed in strict mode"},
+	}
+
+	for _, tc := range tests {
+		opts := DefaultOptions()
+		opts.Strict = true
+		_, err := DecodeWithOptions(strings.NewReader(tc.input), opts)
+		if err == nil {
+			t.Errorf("DecodeWithOptions(%q, Strict=true) = nil error, want error containing %q", tc.input, tc.wantErrPart)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.wantErrPart) {
+			t.Errorf("DecodeWithOptions(%q, Strict=true) error %q does not contain %q", tc.input, err.Error(), tc.wantErrPart)
+		}
+	}
+}
+
+func TestStrictDictionaryKeyOrdering(t *testing.T) {
+	// Unsorted keys: "z" before "a"
+	unsorted := "d1:zi1e1:ai2ee"
+
+	// Non-strict allows unsorted
+	val, err := Decode(strings.NewReader(unsorted))
+	if err != nil {
+		t.Fatalf("Decode in non-strict mode failed unexpectedly: %v", err)
+	}
+	m, ok := val.(map[string]any)
+	if !ok || len(m) != 2 {
+		t.Fatalf("expected map with 2 keys, got %v", val)
+	}
+
+	// Strict rejects unsorted
+	opts := DefaultOptions()
+	opts.Strict = true
+	_, err = DecodeWithOptions(strings.NewReader(unsorted), opts)
+	if err == nil {
+		t.Fatal("expected error for unsorted keys in strict mode, got nil")
+	}
+	if !strings.Contains(err.Error(), "dictionary keys not in ascending order") {
+		t.Fatalf("expected ascending order error, got: %v", err)
+	}
+
+	// Strict rejects duplicate keys
+	duplicate := "d1:ai1e1:ai2ee"
+	_, err = DecodeWithOptions(strings.NewReader(duplicate), opts)
+	if err == nil {
+		t.Fatal("expected error for duplicate keys in strict mode, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate dictionary key \"a\"") {
+		t.Fatalf("expected duplicate key error, got: %v", err)
+	}
+
+	// Sorted keys succeed in strict mode
+	sorted := "d1:ai1e1:zi2ee"
+	val, err = DecodeWithOptions(strings.NewReader(sorted), opts)
+	if err != nil {
+		t.Fatalf("unexpected error for sorted keys in strict mode: %v", err)
+	}
+	if val == nil {
+		t.Fatal("expected non-nil value")
+	}
+}
+
+func TestTypeMismatchNoPanic(t *testing.T) {
+	type Target struct {
+		Flag bool   `bencode:"flag"`
+		Name string `bencode:"name"`
+	}
+
+	// Incoming stream sends an integer for 'flag'
+	input := "d4:flagi42e4:name5:alicee"
+	var dest Target
+	err := Unmarshal(strings.NewReader(input), &dest)
+	if err != nil {
+		t.Fatalf("unexpected error unmarshaling with type mismatch: %v", err)
+	}
+	if dest.Name != "alice" {
+		t.Fatalf("expected Name='alice', got %q", dest.Name)
+	}
+	// Flag should remain its default zero value false
+	if dest.Flag != false {
+		t.Fatalf("expected Flag=false, got %v", dest.Flag)
+	}
+}

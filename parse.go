@@ -1,15 +1,7 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// bencode parser.
-// See the bittorrent protocol
-
 package bencode
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -69,15 +61,6 @@ type Reader interface {
 	io.ByteScanner
 }
 
-func decodeInt64(r *bufio.Reader, delim byte) (data int64, err error) {
-	buf, err := readSlice(r, delim)
-	if err != nil {
-		return
-	}
-	data, err = strconv.ParseInt(string(buf), 10, 64)
-	return
-}
-
 // Read bytes up until delim, return slice without delimiter byte.
 func readSlice(r *bufio.Reader, delim byte) (data []byte, err error) {
 	if data, err = r.ReadSlice(delim); err != nil {
@@ -87,19 +70,27 @@ func readSlice(r *bufio.Reader, delim byte) (data []byte, err error) {
 	if lenData > 0 {
 		data = data[:lenData-1]
 	} else {
-		panic("bad r.ReadSlice() length")
+		err = io.ErrUnexpectedEOF
 	}
 	return
 }
 
-func decodeString(r *bufio.Reader) (data string, err error) {
-	length, err := decodeInt64(r, ':')
+func decodeStringWithState(r *bufio.Reader, state *decodeState) (data string, err error) {
+	lenBuf, err := readNumBytes(r, ':')
 	if err != nil {
-		return
+		return "", err
 	}
-	if length < 0 {
-		err = errors.New("Bad string length")
-		return
+	if state.opts.Strict {
+		if err := validateStrictStringLength(lenBuf); err != nil {
+			return "", err
+		}
+	}
+	length, err := strconv.ParseInt(string(lenBuf), 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("bencode: invalid string length %q: %w", string(lenBuf), err)
+	}
+	if err := state.checkStringLength(length); err != nil {
+		return "", err
 	}
 
 	// Can we peek that much data out of r?
@@ -110,39 +101,19 @@ func decodeString(r *bufio.Reader) (data string, err error) {
 	}
 
 	var buf = make([]byte, length)
-	_, err = readFull(r, buf)
-	if err != nil {
-		return
+	if _, err = io.ReadFull(r, buf); err != nil {
+		return "", err
 	}
 	data = string(buf)
 	return
 }
 
-// Like io.ReadFull, but takes a bufio.Reader.
-func readFull(r *bufio.Reader, buf []byte) (n int, err error) {
-	return readAtLeast(r, buf, len(buf))
-}
-
-// Like io.ReadAtLeast, but takes a bufio.Reader.
-func readAtLeast(r *bufio.Reader, buf []byte, min int) (n int, err error) {
-	if len(buf) < min {
-		return 0, io.ErrShortBuffer
+func parseFromReader(r *bufio.Reader, build builder, state *decodeState) (err error) {
+	var c byte
+	if err = state.incElement(); err != nil {
+		goto exit
 	}
-	for n < min && err == nil {
-		var nn int
-		nn, err = r.Read(buf[n:])
-		n += nn
-	}
-	if n >= min {
-		err = nil
-	} else if n > 0 && err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
-	return
-}
-
-func parseFromReader(r *bufio.Reader, build builder) (err error) {
-	c, err := r.ReadByte()
+	c, err = r.ReadByte()
 	if err != nil {
 		goto exit
 	}
@@ -154,7 +125,7 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 			goto exit
 		}
 		var str string
-		str, err = decodeString(r)
+		str, err = decodeStringWithState(r, state)
 		if err != nil {
 			goto exit
 		}
@@ -162,8 +133,14 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 
 	case c == 'd':
 		// dictionary
+		if err = state.incDepth(); err != nil {
+			goto exit
+		}
+		defer state.decDepth()
 
 		build.Map()
+		var lastKey string
+		var hasLastKey bool
 		for {
 			c, err = r.ReadByte()
 			if err != nil {
@@ -177,12 +154,25 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 				goto exit
 			}
 			var key string
-			key, err = decodeString(r)
+			key, err = decodeStringWithState(r, state)
 			if err != nil {
 				goto exit
 			}
-			// TODO: in pendantic mode, check for keys in ascending order.
-			err = parseFromReader(r, build.Key(key))
+			if state.opts.Strict {
+				if hasLastKey {
+					if key == lastKey {
+						err = fmt.Errorf("bencode: duplicate dictionary key %q", key)
+						goto exit
+					}
+					if key < lastKey {
+						err = fmt.Errorf("bencode: dictionary keys not in ascending order: %q followed by %q", lastKey, key)
+						goto exit
+					}
+				}
+				lastKey = key
+				hasLastKey = true
+			}
+			err = parseFromReader(r, build.Key(key), state)
 			if err != nil {
 				goto exit
 			}
@@ -190,28 +180,45 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 
 	case c == 'i':
 		var buf []byte
-		buf, err = readSlice(r, 'e')
+		buf, err = readNumBytes(r, 'e')
 		if err != nil {
 			goto exit
 		}
-		var str string
-		var i int64
-		var i2 uint64
-		var f float64
-		str = string(buf)
-		// If the number is exactly an integer, use that.
-		if i, err = strconv.ParseInt(str, 10, 64); err == nil {
+		if state.opts.Strict {
+			if err = validateStrictInteger(buf); err != nil {
+				goto exit
+			}
+			var i int64
+			i, err = strconv.ParseInt(string(buf), 10, 64)
+			if err != nil {
+				err = fmt.Errorf("bencode: invalid integer %q: %w", string(buf), err)
+				goto exit
+			}
 			build.Int64(i)
-		} else if i2, err = strconv.ParseUint(str, 10, 64); err == nil {
-			build.Uint64(i2)
-		} else if f, err = strconv.ParseFloat(str, 64); err == nil {
-			build.Float64(f)
 		} else {
-			err = errors.New("Bad integer")
+			str := string(buf)
+			var i int64
+			var i2 uint64
+			var f float64
+			if i, err = strconv.ParseInt(str, 10, 64); err == nil {
+				build.Int64(i)
+			} else if i2, err = strconv.ParseUint(str, 10, 64); err == nil {
+				build.Uint64(i2)
+			} else if f, err = strconv.ParseFloat(str, 64); err == nil {
+				build.Float64(f)
+			} else {
+				err = fmt.Errorf("bencode: bad integer %q", str)
+				goto exit
+			}
 		}
 
 	case c == 'l':
 		// array
+		if err = state.incDepth(); err != nil {
+			goto exit
+		}
+		defer state.decDepth()
+
 		build.Array()
 		n := 0
 		for {
@@ -226,7 +233,7 @@ func parseFromReader(r *bufio.Reader, build builder) (err error) {
 			if err != nil {
 				goto exit
 			}
-			err = parseFromReader(r, build.Elem(n))
+			err = parseFromReader(r, build.Elem(n), state)
 			if err != nil {
 				goto exit
 			}
@@ -242,7 +249,7 @@ exit:
 
 // Parse parses the bencode stream and makes calls to
 // the builder to construct a parsed representation.
-func parse(reader io.Reader, builder builder) (err error) {
+func parse(reader io.Reader, builder builder, state *decodeState) (err error) {
 	// Check to see if the reader already fulfills the bufio.Reader interface.
 	// Wrap it in a bufio.Reader if it doesn't.
 	r, ok := reader.(*bufio.Reader)
@@ -251,7 +258,7 @@ func parse(reader io.Reader, builder builder) (err error) {
 		defer bufioReaderPool.Put(r)
 	}
 
-	return parseFromReader(r, builder)
+	return parseFromReader(r, builder, state)
 }
 
 var bufioReaderPool sync.Pool
