@@ -67,7 +67,7 @@ func DefaultOptions() Options {
 
 // Decoder reads and decodes bencode values from an input stream.
 type Decoder struct {
-	r    io.Reader
+	r    *bufio.Reader
 	opts Options
 }
 
@@ -78,10 +78,28 @@ func NewDecoder(r io.Reader) *Decoder {
 
 // NewDecoderWithOptions returns a new Decoder reading from r with the given Options.
 func NewDecoderWithOptions(r io.Reader, opts Options) *Decoder {
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(r)
+	}
 	return &Decoder{
-		r:    r,
+		r:    br,
 		opts: opts,
 	}
+}
+
+// Buffered returns a reader of the data remaining in the Decoder's buffer.
+// The reader is valid until the next call to Decode or Unmarshal.
+func (d *Decoder) Buffered() io.Reader {
+	n := d.r.Buffered()
+	if n == 0 {
+		return bytes.NewReader(nil)
+	}
+	buf, err := d.r.Peek(n)
+	if err != nil {
+		return bytes.NewReader(nil)
+	}
+	return bytes.NewReader(buf)
 }
 
 // SetMaxStringLength sets the maximum string length in bytes and returns the Decoder.
@@ -110,14 +128,8 @@ func (d *Decoder) SetStrict(strict bool) *Decoder {
 
 // Decode reads the next bencode value from the stream and returns its generic Go representation.
 func (d *Decoder) Decode() (data any, err error) {
-	bufioReader, ok := d.r.(*bufio.Reader)
-	if !ok {
-		bufioReader = newBufioReader(d.r)
-		defer bufioReaderPool.Put(bufioReader)
-	}
-
 	state := &decodeState{opts: d.opts}
-	return state.decode(bufioReader)
+	return state.decode(d.r)
 }
 
 // Unmarshal reads the next bencode value and parses it into val (which must be a pointer).
@@ -133,22 +145,52 @@ func (d *Decoder) Unmarshal(val any) error {
 // The object representation is a tree of Go data types: string, int64, uint64,
 // []any, or map[string]any.
 func Decode(reader io.Reader) (data any, err error) {
-	return NewDecoder(reader).Decode()
+	br, ok := reader.(*bufio.Reader)
+	if !ok {
+		br = newBufioReader(reader)
+		defer bufioReaderPool.Put(br)
+	}
+	state := &decodeState{opts: DefaultOptions()}
+	return state.decode(br)
 }
 
 // DecodeWithOptions parses the stream r with custom Options and returns the generic bencode representation.
 func DecodeWithOptions(reader io.Reader, opts Options) (data any, err error) {
-	return NewDecoderWithOptions(reader, opts).Decode()
+	br, ok := reader.(*bufio.Reader)
+	if !ok {
+		br = newBufioReader(reader)
+		defer bufioReaderPool.Put(br)
+	}
+	state := &decodeState{opts: opts}
+	return state.decode(br)
 }
 
 // Unmarshal reads and parses the bencode syntax data from r into val using DefaultOptions.
 func Unmarshal(r io.Reader, val any) (err error) {
-	return NewDecoder(r).Unmarshal(val)
+	if reflect.TypeOf(val).Kind() != reflect.Ptr {
+		return errors.New("Attempt to unmarshal into a non-pointer")
+	}
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = newBufioReader(r)
+		defer bufioReaderPool.Put(br)
+	}
+	state := &decodeState{opts: DefaultOptions()}
+	return unmarshalValueWithState(br, reflect.Indirect(reflect.ValueOf(val)), state)
 }
 
 // UnmarshalWithOptions reads and parses bencode syntax data from r into val with custom Options.
 func UnmarshalWithOptions(r io.Reader, val any, opts Options) error {
-	return NewDecoderWithOptions(r, opts).Unmarshal(val)
+	if reflect.TypeOf(val).Kind() != reflect.Ptr {
+		return errors.New("Attempt to unmarshal into a non-pointer")
+	}
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = newBufioReader(r)
+		defer bufioReaderPool.Put(br)
+	}
+	state := &decodeState{opts: opts}
+	return unmarshalValueWithState(br, reflect.Indirect(reflect.ValueOf(val)), state)
 }
 
 type decodeState struct {

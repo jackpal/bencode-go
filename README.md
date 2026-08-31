@@ -35,6 +35,9 @@ dec := bencode.NewDecoder(reader).
 
 data, err := dec.Decode()
 // or: err := dec.Unmarshal(&myObject)
+
+// If the stream contains trailing non-bencode data, access unread buffered bytes:
+leftover := dec.Buffered()
 ```
 
 ### Encode an object into a bencode stream

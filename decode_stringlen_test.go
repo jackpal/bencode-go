@@ -5,7 +5,9 @@
 package bencode
 
 import (
+	"bufio"
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -257,5 +259,83 @@ func TestTypeMismatchNoPanic(t *testing.T) {
 	// Flag should remain its default zero value false
 	if dest.Flag != false {
 		t.Fatalf("expected Flag=false, got %v", dest.Flag)
+	}
+}
+
+func TestDecoderConsecutive(t *testing.T) {
+	input := "i10ei20e5:hello"
+	dec := NewDecoder(strings.NewReader(input))
+
+	v1, err := dec.Decode()
+	if err != nil {
+		t.Fatalf("failed decoding first value: %v", err)
+	}
+	if v1 != int64(10) {
+		t.Fatalf("expected 10, got %v", v1)
+	}
+
+	v2, err := dec.Decode()
+	if err != nil {
+		t.Fatalf("failed decoding second value: %v", err)
+	}
+	if v2 != int64(20) {
+		t.Fatalf("expected 20, got %v", v2)
+	}
+
+	v3, err := dec.Decode()
+	if err != nil {
+		t.Fatalf("failed decoding third value: %v", err)
+	}
+	if v3 != "hello" {
+		t.Fatalf("expected 'hello', got %v", v3)
+	}
+
+	_, err = dec.Decode()
+	if err != io.EOF {
+		t.Fatalf("expected EOF at end of stream, got %v", err)
+	}
+}
+
+func TestDecoderBuffered(t *testing.T) {
+	input := "d4:name5:aliceeraw payload bytes here"
+	dec := NewDecoder(strings.NewReader(input))
+
+	var dest struct {
+		Name string
+	}
+	if err := dec.Unmarshal(&dest); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if dest.Name != "alice" {
+		t.Fatalf("expected Name='alice', got %q", dest.Name)
+	}
+
+	bufferedData, err := io.ReadAll(dec.Buffered())
+	if err != nil {
+		t.Fatalf("reading buffered data failed: %v", err)
+	}
+	if string(bufferedData) != "raw payload bytes here" {
+		t.Fatalf("expected 'raw payload bytes here', got %q", string(bufferedData))
+	}
+}
+
+func TestUnmarshalWithBufioReaderRetainsBuffer(t *testing.T) {
+	input := "i42etrail"
+	br := bufio.NewReader(strings.NewReader(input))
+
+	var val int
+	if err := Unmarshal(br, &val); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if val != 42 {
+		t.Fatalf("expected 42, got %d", val)
+	}
+
+	rem, err := io.ReadAll(br)
+	if err != nil {
+		t.Fatalf("reading remainder failed: %v", err)
+	}
+	if string(rem) != "trail" {
+		t.Fatalf("expected 'trail', got %q", string(rem))
 	}
 }
