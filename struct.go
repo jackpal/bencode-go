@@ -209,6 +209,9 @@ func (b *structBuilder) Key(k string) builder {
 		k = strings.ToLower(k)
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
+			if field.PkgPath != "" {
+				continue
+			}
 			key := bencodeKey(field, nil)
 			if strings.ToLower(key) == k ||
 				strings.ToLower(field.Name) == k {
@@ -473,19 +476,22 @@ func writeStruct(w io.Writer, val reflect.Value) (err error) {
 	typ := val.Type()
 
 	numFields := val.NumField()
-	svList := make(stringValueArray, numFields)
+	svList := make(stringValueArray, 0, numFields)
 
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
-		bencodeKey(field, &svList[i])
+		if field.PkgPath != "" {
+			continue // ignore unexported fields
+		}
+		var sv stringValue
+		bencodeKey(field, &sv)
 		// The tag `bencode:"-"` should mean that this field must be ignored
 		// See https://golang.org/pkg/encoding/json/#Marshal or https://golang.org/pkg/encoding/xml/#Marshal
-		// We set a zero value so that it is ignored by the writeSVList() function
-		if svList[i].key == "-" {
-			svList[i].value = reflect.Value{}
-		} else {
-			svList[i].value = val.Field(i)
+		if sv.key == "-" {
+			continue
 		}
+		sv.value = val.Field(i)
+		svList = append(svList, sv)
 	}
 
 	err = writeSVList(w, svList)

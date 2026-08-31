@@ -368,3 +368,42 @@ func TestMarshalDifferentTypes(t *testing.T) {
 		t.Fatalf("Incorrectly encoded byte array, got %s", buf.String())
 	}
 }
+
+type unexportedFields struct {
+	Public     string
+	unexported string
+	privateInt int
+	Age        int
+}
+
+func TestSkipUnexportedFields(t *testing.T) {
+	u := unexportedFields{
+		Public:     "hello",
+		unexported: "secret",
+		privateInt: 99,
+		Age:        30,
+	}
+
+	var buf bytes.Buffer
+	if err := Marshal(&buf, u); err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	expected := "d3:Agei30e6:Public5:helloe"
+	if buf.String() != expected {
+		t.Fatalf("Expected %q, got %q", expected, buf.String())
+	}
+
+	// Also verify unmarshaling does not populate or match unexported fields
+	input := "d3:Agei30e6:Public5:hello10:unexported7:changed10:privateInti42ee"
+	var dest unexportedFields
+	if err := Unmarshal(bytes.NewReader([]byte(input)), &dest); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if dest.Public != "hello" || dest.Age != 30 {
+		t.Fatalf("Public fields not set correctly: %+v", dest)
+	}
+	if dest.unexported != "" || dest.privateInt != 0 {
+		t.Fatalf("Unexported fields should not have been set: %+v", dest)
+	}
+}
