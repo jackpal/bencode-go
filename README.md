@@ -71,6 +71,7 @@ file for details.)
 
 | tag    | Notes                                                                           |
 | ------ | ------------------------------------------------------------------------------- |
+| v1.2.0 | Added `RawMessage` support, `Decoder.Buffered()`, and skip unexported fields.   |
 | v1.1.0 | Added Decoder with configurable resource limits, strict BEP 3 validation, and `any` types. |
 | v1.0.2 | Added go module.                                                                |
 | v1.0.1 | Removed architecture specific test that was failing on ARM.                      |
