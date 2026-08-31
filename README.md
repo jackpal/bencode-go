@@ -40,6 +40,19 @@ data, err := dec.Decode()
 leftover := dec.Buffered()
 ```
 
+### Access raw bencoded bytes (e.g. for BitTorrent info_hash)
+```go
+type Torrent struct {
+	Announce string             `bencode:"announce"`
+	Info     bencode.RawMessage `bencode:"info"`
+}
+
+var t Torrent
+err := bencode.Unmarshal(reader, &t)
+// Compute the SHA-1 info_hash directly from the raw bencoded info dictionary:
+infoHash := sha1.Sum(t.Info)
+```
+
 ### Encode an object into a bencode stream
 ```go
 err := bencode.Marshal(writer, data)

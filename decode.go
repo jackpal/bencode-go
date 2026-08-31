@@ -16,6 +16,11 @@ import (
 	"reflect"
 )
 
+// RawMessage is a raw encoded bencode value. It can be used to delay
+// bencode decoding or to access the original bytes of a bencoded value
+// (such as the "info" dictionary in a BitTorrent metainfo file).
+type RawMessage []byte
+
 // Default limits for decoding bencode data.
 const (
 	// DefaultMaxStringLength is the default maximum string length (64 MiB).

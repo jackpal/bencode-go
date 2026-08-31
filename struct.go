@@ -29,6 +29,59 @@ type structBuilder struct {
 
 var nobuilder *structBuilder
 
+var rawMessageType = reflect.TypeOf(RawMessage(nil))
+
+func (b *structBuilder) wantsRaw() bool {
+	if b == nil {
+		return false
+	}
+	v := b.val
+	if !v.IsValid() {
+		return false
+	}
+	if v.Type() == rawMessageType {
+		return true
+	}
+	if v.Kind() == reflect.Ptr && v.Type().Elem() == rawMessageType {
+		return true
+	}
+	return false
+}
+
+func (b *structBuilder) Raw(data []byte) {
+	if b == nil {
+		return
+	}
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	rawVal := reflect.ValueOf(RawMessage(cp))
+
+	v := b.val
+	if !v.IsValid() {
+		b.val = rawVal
+		return
+	}
+	if v.Kind() == reflect.Ptr {
+		if v.CanSet() {
+			if v.IsNil() {
+				ptr := reflect.New(rawMessageType)
+				ptr.Elem().Set(rawVal)
+				v.Set(ptr)
+			} else {
+				v.Elem().Set(rawVal)
+			}
+		} else if !v.IsNil() {
+			v.Elem().Set(rawVal)
+		}
+		return
+	}
+	if v.CanSet() {
+		v.Set(rawVal)
+	} else {
+		b.val = rawVal
+	}
+}
+
 func isfloat(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Float32, reflect.Float64:
@@ -510,6 +563,15 @@ func writeValue(w io.Writer, val reflect.Value) (err error) {
 	if !val.IsValid() {
 		err = errors.New("Can't write null value")
 		return
+	}
+
+	if val.Type() == rawMessageType {
+		_, err = w.Write(val.Bytes())
+		return err
+	}
+	if val.Kind() == reflect.Ptr && !val.IsNil() && val.Type().Elem() == rawMessageType {
+		_, err = w.Write(val.Elem().Bytes())
+		return err
 	}
 
 	switch v := val; v.Kind() {

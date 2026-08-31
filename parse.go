@@ -2,6 +2,8 @@ package bencode
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -43,6 +45,11 @@ type builder interface {
 
 	// Flush changes to parent builder if necessary.
 	Flush()
+}
+
+type rawBuilder interface {
+	wantsRaw() bool
+	Raw(data []byte)
 }
 
 // Deprecated: This type is currently unused. It is exposed for backwards
@@ -108,7 +115,164 @@ func decodeStringWithState(r *bufio.Reader, state *decodeState) (data string, er
 	return
 }
 
+func readRawValue(r *bufio.Reader, state *decodeState) ([]byte, error) {
+	if err := state.incElement(); err != nil {
+		return nil, err
+	}
+	c, err := r.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case c >= '0' && c <= '9':
+		if err := r.UnreadByte(); err != nil {
+			return nil, err
+		}
+		lenBuf, err := readNumBytes(r, ':')
+		if err != nil {
+			return nil, err
+		}
+		if state.opts.Strict {
+			if err := validateStrictStringLength(lenBuf); err != nil {
+				return nil, err
+			}
+		}
+		strLen, err := strconv.ParseInt(string(lenBuf), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("bencode: invalid string length %q: %w", string(lenBuf), err)
+		}
+		if err := state.checkStringLength(strLen); err != nil {
+			return nil, err
+		}
+		totalLen := len(lenBuf) + 1 + int(strLen)
+		raw := make([]byte, totalLen)
+		copy(raw, lenBuf)
+		raw[len(lenBuf)] = ':'
+		if _, err := io.ReadFull(r, raw[len(lenBuf)+1:]); err != nil {
+			return nil, err
+		}
+		return raw, nil
+
+	case c == 'i':
+		buf, err := readNumBytes(r, 'e')
+		if err != nil {
+			return nil, err
+		}
+		if state.opts.Strict {
+			if err := validateStrictInteger(buf); err != nil {
+				return nil, err
+			}
+		} else {
+			str := string(buf)
+			if _, err := strconv.ParseInt(str, 10, 64); err != nil {
+				if _, err := strconv.ParseUint(str, 10, 64); err != nil {
+					if _, err := strconv.ParseFloat(str, 64); err != nil {
+						return nil, fmt.Errorf("bencode: bad integer %q", str)
+					}
+				}
+			}
+		}
+		raw := make([]byte, 1+len(buf)+1)
+		raw[0] = 'i'
+		copy(raw[1:], buf)
+		raw[len(raw)-1] = 'e'
+		return raw, nil
+
+	case c == 'l':
+		if err := state.incDepth(); err != nil {
+			return nil, err
+		}
+		defer state.decDepth()
+
+		var raw []byte
+		raw = append(raw, 'l')
+		for {
+			next, err := r.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+			if next == 'e' {
+				raw = append(raw, 'e')
+				return raw, nil
+			}
+			if err := r.UnreadByte(); err != nil {
+				return nil, err
+			}
+			elemRaw, err := readRawValue(r, state)
+			if err != nil {
+				return nil, err
+			}
+			raw = append(raw, elemRaw...)
+		}
+
+	case c == 'd':
+		if err := state.incDepth(); err != nil {
+			return nil, err
+		}
+		defer state.decDepth()
+
+		var raw []byte
+		raw = append(raw, 'd')
+		var lastKey string
+		var hasLastKey bool
+
+		for {
+			next, err := r.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+			if next == 'e' {
+				raw = append(raw, 'e')
+				return raw, nil
+			}
+			if err := r.UnreadByte(); err != nil {
+				return nil, err
+			}
+			keyRaw, err := readRawValue(r, state)
+			if err != nil {
+				return nil, err
+			}
+			if state.opts.Strict {
+				colonIdx := bytes.IndexByte(keyRaw, ':')
+				if colonIdx == -1 {
+					return nil, errors.New("bencode: invalid dictionary key")
+				}
+				key := string(keyRaw[colonIdx+1:])
+				if hasLastKey {
+					if key == lastKey {
+						return nil, fmt.Errorf("bencode: duplicate dictionary key %q", key)
+					}
+					if key < lastKey {
+						return nil, fmt.Errorf("bencode: dictionary keys not in ascending order: %q followed by %q", lastKey, key)
+					}
+				}
+				lastKey = key
+				hasLastKey = true
+			}
+			valRaw, err := readRawValue(r, state)
+			if err != nil {
+				return nil, err
+			}
+			raw = append(raw, keyRaw...)
+			raw = append(raw, valRaw...)
+		}
+
+	default:
+		return nil, fmt.Errorf("Unexpected character: '%v'", c)
+	}
+}
+
 func parseFromReader(r *bufio.Reader, build builder, state *decodeState) (err error) {
+	if rb, ok := build.(rawBuilder); ok && rb.wantsRaw() {
+		raw, err := readRawValue(r, state)
+		if err != nil {
+			return err
+		}
+		rb.Raw(raw)
+		build.Flush()
+		return nil
+	}
+
 	var c byte
 	if err = state.incElement(); err != nil {
 		goto exit

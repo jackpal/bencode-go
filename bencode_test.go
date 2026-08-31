@@ -2,6 +2,7 @@ package bencode
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"reflect"
@@ -405,5 +406,115 @@ func TestSkipUnexportedFields(t *testing.T) {
 	}
 	if dest.unexported != "" || dest.privateInt != 0 {
 		t.Fatalf("Unexported fields should not have been set: %+v", dest)
+	}
+}
+
+type torrentMeta struct {
+	Announce string     `bencode:"announce"`
+	Comment  string     `bencode:"comment,omitempty"`
+	Info     RawMessage `bencode:"info"`
+}
+
+func TestRawMessageTorrentInfoHash(t *testing.T) {
+	// Raw bencode with an info dict
+	infoDict := "d6:lengthi170917888e12:piece lengthi262144e4:name12:testfile.isoe"
+	input := "d8:announce27:http://tracker.example.com/4:info" + infoDict + "e"
+
+	var meta torrentMeta
+	if err := Unmarshal(bytes.NewReader([]byte(input)), &meta); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if meta.Announce != "http://tracker.example.com/" {
+		t.Fatalf("Expected announce URL, got %q", meta.Announce)
+	}
+
+	if string(meta.Info) != infoDict {
+		t.Fatalf("Expected info raw bytes %q, got %q", infoDict, string(meta.Info))
+	}
+
+	// Verify info_hash SHA-1 computation on raw bytes
+	expectedHash := sha1.Sum([]byte(infoDict))
+	actualHash := sha1.Sum(meta.Info)
+	if actualHash != expectedHash {
+		t.Fatalf("Hash mismatch: expected %x, got %x", expectedHash, actualHash)
+	}
+
+	// Re-marshal and ensure exact byte-for-byte preservation of the raw info dict
+	var buf bytes.Buffer
+	if err := Marshal(&buf, meta); err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if buf.String() != input {
+		t.Fatalf("Expected round-trip %q, got %q", input, buf.String())
+	}
+}
+
+func TestRawMessageTopLevel(t *testing.T) {
+	input := "d3:cati1e3:dogi2ee"
+	var raw RawMessage
+	if err := Unmarshal(bytes.NewReader([]byte(input)), &raw); err != nil {
+		t.Fatalf("Unmarshal into RawMessage failed: %v", err)
+	}
+	if string(raw) != input {
+		t.Fatalf("Expected %q, got %q", input, string(raw))
+	}
+
+	var buf bytes.Buffer
+	if err := Marshal(&buf, raw); err != nil {
+		t.Fatalf("Marshal RawMessage failed: %v", err)
+	}
+	if buf.String() != input {
+		t.Fatalf("Expected %q, got %q", input, buf.String())
+	}
+}
+
+func TestRawMessageMapAndSlice(t *testing.T) {
+	// Map of RawMessage
+	mapInput := "d1:ai10e1:b5:helloe"
+	var m map[string]RawMessage
+	if err := Unmarshal(bytes.NewReader([]byte(mapInput)), &m); err != nil {
+		t.Fatalf("Unmarshal into map[string]RawMessage failed: %v", err)
+	}
+	if string(m["a"]) != "i10e" {
+		t.Fatalf("Expected m[\"a\"] = 'i10e', got %q", string(m["a"]))
+	}
+	if string(m["b"]) != "5:hello" {
+		t.Fatalf("Expected m[\"b\"] = '5:hello', got %q", string(m["b"]))
+	}
+
+	// Slice of RawMessage
+	sliceInput := "li10e5:hellod1:ki1eee"
+	var s []RawMessage
+	if err := Unmarshal(bytes.NewReader([]byte(sliceInput)), &s); err != nil {
+		t.Fatalf("Unmarshal into []RawMessage failed: %v", err)
+	}
+	if len(s) != 3 {
+		t.Fatalf("Expected 3 items, got %d", len(s))
+	}
+	if string(s[0]) != "i10e" || string(s[1]) != "5:hello" || string(s[2]) != "d1:ki1ee" {
+		t.Fatalf("Slice contents mismatch: %v", s)
+	}
+}
+
+func TestRawMessagePointer(t *testing.T) {
+	type withPtr struct {
+		Data *RawMessage `bencode:"data"`
+	}
+	input := "d4:datai999ee"
+	var wp withPtr
+	if err := Unmarshal(bytes.NewReader([]byte(input)), &wp); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if wp.Data == nil || string(*wp.Data) != "i999e" {
+		t.Fatalf("Expected pointer data 'i999e', got %v", wp.Data)
+	}
+
+	var buf bytes.Buffer
+	if err := Marshal(&buf, wp); err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if buf.String() != input {
+		t.Fatalf("Expected %q, got %q", input, buf.String())
 	}
 }
