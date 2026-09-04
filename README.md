@@ -3,6 +3,8 @@
 A Go language binding for encoding and decoding data in the bencode format that
 is used by the BitTorrent peer-to-peer file sharing protocol.
 
+> **Maintenance status:** ✅ Maintained (stable). This library is feature-complete — I accept bug fixes and security patches, but am not adding new features. See [SECURITY.md](SECURITY.md) for how to report vulnerabilities.
+
 ## Quick Start
 
 ### Get the package
