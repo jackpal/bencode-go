@@ -407,7 +407,9 @@ func parseFromReader(r *bufio.Reader, build builder, state *decodeState) (err er
 		err = fmt.Errorf("Unexpected character: '%v'", c)
 	}
 exit:
-	build.Flush()
+	if err == nil {
+		build.Flush()
+	}
 	return
 }
 

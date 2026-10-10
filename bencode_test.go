@@ -331,6 +331,9 @@ func TestUnmarshalTypedMapValues(t *testing.T) {
 				{"existing_slice", "d1:ali5eee", map[string][]int{"a": {1, 2}}, map[string][]int{"a": {5, 2}}},
 				{"raw_message", "d1:ad1:bi5eee", map[string]RawMessage(nil), map[string]RawMessage{"a": RawMessage("d1:bi5ee")}},
 				{"string", "d1:a3:newe", map[string]string(nil), map[string]string{"a": "new"}},
+				{"interface_string", "d1:a3:newe", map[string]any(nil), map[string]any{"a": "new"}},
+				{"existing_interface_string", "d1:a3:newe", map[string]any{"a": "old", "b": 2}, map[string]any{"a": "new", "b": 2}},
+				{"existing_interface_nil", "d1:a3:newe", map[string]any{"a": nil}, map[string]any{"a": "new"}},
 				{"interface_integer", "d1:ai5ee", map[string]any(nil), map[string]any{"a": int(5)}},
 				{"interface_unsigned", "d1:ai18446744073709551615ee", map[string]any(nil), map[string]any{"a": ^uint64(0)}},
 				{"interface_float", "d1:ai7.5ee", map[string]any(nil), map[string]any{"a": float64(7.5)}},
@@ -346,6 +349,58 @@ func TestUnmarshalTypedMapValues(t *testing.T) {
 						t.Fatalf("got %#v, want %#v", got, tt.want)
 					}
 				})
+			}
+		})
+	}
+}
+
+func TestUnmarshalInvalidMapValues(t *testing.T) {
+	decoders := []struct {
+		name string
+		run  func(string, any) error
+	}{
+		{"Unmarshal", func(input string, dest any) error {
+			return Unmarshal(bytes.NewBufferString(input), dest)
+		}},
+		{"UnmarshalWithOptions", func(input string, dest any) error {
+			return UnmarshalWithOptions(bytes.NewBufferString(input), dest, DefaultOptions())
+		}},
+		{"Decoder", func(input string, dest any) error {
+			return NewDecoder(bytes.NewBufferString(input)).Unmarshal(dest)
+		}},
+	}
+	for _, decoder := range decoders {
+		t.Run(decoder.name, func(t *testing.T) {
+			for _, input := range []string{"d1:ai", "d1:a3:ab", "d1:ax"} {
+				for _, initial := range []any{
+					map[string]int{"b": 2},
+					map[string]string{"b": "kept"},
+					map[string]any{"b": 2},
+					map[string]int{"a": 1, "b": 2},
+					map[string]string{"a": "old", "b": "kept"},
+					map[string]any{"a": "old", "b": 2},
+				} {
+					dest := reflect.New(reflect.TypeOf(initial))
+					original := reflect.ValueOf(initial)
+					value := reflect.MakeMap(original.Type())
+					for _, key := range original.MapKeys() {
+						value.SetMapIndex(key, original.MapIndex(key))
+					}
+					dest.Elem().Set(value)
+					if err := decoder.run(input, dest.Interface()); err == nil {
+						t.Fatalf("input %q with %T: expected an error", input, initial)
+					}
+					if got := dest.Elem().Interface(); !reflect.DeepEqual(got, initial) {
+						t.Errorf("input %q: got %#v, want %#v", input, got, initial)
+					}
+				}
+			}
+			var dest map[string]int
+			if err := decoder.run("d1:bi2e1:ai", &dest); err == nil {
+				t.Fatal("expected an error after the completed entry")
+			}
+			if want := map[string]int{"b": 2}; !reflect.DeepEqual(dest, want) {
+				t.Errorf("got %#v, want %#v", dest, want)
 			}
 		})
 	}

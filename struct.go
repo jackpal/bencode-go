@@ -183,7 +183,11 @@ func (b *structBuilder) String(s string) {
 		}
 		b.val.SetString(s)
 	case reflect.Interface:
-		b.val.Set(reflect.ValueOf(s))
+		if !b.val.CanSet() {
+			b.val = reflect.ValueOf(s)
+		} else {
+			b.val.Set(reflect.ValueOf(s))
+		}
 	}
 }
 
@@ -278,15 +282,15 @@ func (b *structBuilder) Key(k string) builder {
 		}
 		key := reflect.ValueOf(k)
 		elem := v.MapIndex(key)
-		if !elem.IsValid() {
-			v.SetMapIndex(key, reflect.Zero(t.Elem()))
-			elem = v.MapIndex(key)
-		}
 		if t.Elem().Kind() != reflect.Interface {
 			// Concrete map entries need a settable copy with their declared type.
 			value := reflect.New(t.Elem()).Elem()
-			value.Set(elem)
+			if elem.IsValid() {
+				value.Set(elem)
+			}
 			elem = value
+		} else if !elem.IsValid() {
+			elem = reflect.Zero(t.Elem())
 		}
 		return &structBuilder{val: elem, map_: v, key: key}
 	}
