@@ -282,6 +282,12 @@ func (b *structBuilder) Key(k string) builder {
 			v.SetMapIndex(key, reflect.Zero(t.Elem()))
 			elem = v.MapIndex(key)
 		}
+		if t.Elem().Kind() != reflect.Interface {
+			// Concrete map entries need a settable copy with their declared type.
+			value := reflect.New(t.Elem()).Elem()
+			value.Set(elem)
+			elem = value
+		}
 		return &structBuilder{val: elem, map_: v, key: key}
 	}
 	return nobuilder

@@ -279,6 +279,78 @@ func TestUnmarshal(t *testing.T) {
 	}
 }
 
+func TestUnmarshalTypedMapValues(t *testing.T) {
+	type count int64
+	type label string
+	type counts map[string]int64
+	type record struct {
+		Count int
+		Label string
+	}
+
+	decoders := []struct {
+		name string
+		run  func(string, any) error
+	}{
+		{"Unmarshal", func(input string, dest any) error {
+			return Unmarshal(bytes.NewBufferString(input), dest)
+		}},
+		{"UnmarshalWithOptions", func(input string, dest any) error {
+			return UnmarshalWithOptions(bytes.NewBufferString(input), dest, DefaultOptions())
+		}},
+		{"Decoder", func(input string, dest any) error {
+			return NewDecoder(bytes.NewBufferString(input)).Unmarshal(dest)
+		}},
+	}
+	for _, decoder := range decoders {
+		t.Run(decoder.name, func(t *testing.T) {
+			tests := []struct {
+				name    string
+				input   string
+				initial any
+				want    any
+			}{
+				{"int", "d1:ai5ee", map[string]int(nil), map[string]int{"a": 5}},
+				{"int8", "d1:ai-5ee", map[string]int8(nil), map[string]int8{"a": -5}},
+				{"int64", "d1:ai5ee", map[string]int64(nil), map[string]int64{"a": 5}},
+				{"uint8", "d1:ai5ee", map[string]uint8(nil), map[string]uint8{"a": 5}},
+				{"uint64", "d1:ai18446744073709551615ee", map[string]uint64(nil), map[string]uint64{"a": ^uint64(0)}},
+				{"float32_integer", "d1:ai5ee", map[string]float32(nil), map[string]float32{"a": 5}},
+				{"float32_fraction", "d1:ai7.5ee", map[string]float32(nil), map[string]float32{"a": 7.5}},
+				{"float64", "d1:ai7.5ee", map[string]float64(nil), map[string]float64{"a": 7.5}},
+				{"named_integer", "d1:ai5ee", map[string]count(nil), map[string]count{"a": 5}},
+				{"named_string", "d1:a3:newe", map[string]label(nil), map[string]label{"a": "new"}},
+				{"named_map", "d1:ai5ee", counts(nil), counts{"a": 5}},
+				{"slice", "d1:ali5ei6eee", map[string][]int(nil), map[string][]int{"a": {5, 6}}},
+				{"array", "d1:ali5ei6eee", map[string][2]int(nil), map[string][2]int{"a": {5, 6}}},
+				{"struct", "d1:ad5:counti5e5:label3:newee", map[string]record(nil), map[string]record{"a": {5, "new"}}},
+				{"nested_map", "d1:ad1:bi5eee", map[string]map[string]int(nil), map[string]map[string]int{"a": {"b": 5}}},
+				{"existing_number", "d1:ai5ee", map[string]int64{"a": 1, "b": 2}, map[string]int64{"a": 5, "b": 2}},
+				{"existing_struct", "d1:ad5:counti5eee", map[string]record{"a": {1, "kept"}}, map[string]record{"a": {5, "kept"}}},
+				{"existing_nested_map", "d1:ad1:bi5eee", map[string]map[string]int{"a": {"c": 2}}, map[string]map[string]int{"a": {"b": 5, "c": 2}}},
+				{"existing_slice", "d1:ali5eee", map[string][]int{"a": {1, 2}}, map[string][]int{"a": {5, 2}}},
+				{"raw_message", "d1:ad1:bi5eee", map[string]RawMessage(nil), map[string]RawMessage{"a": RawMessage("d1:bi5ee")}},
+				{"string", "d1:a3:newe", map[string]string(nil), map[string]string{"a": "new"}},
+				{"interface_integer", "d1:ai5ee", map[string]any(nil), map[string]any{"a": int(5)}},
+				{"interface_unsigned", "d1:ai18446744073709551615ee", map[string]any(nil), map[string]any{"a": ^uint64(0)}},
+				{"interface_float", "d1:ai7.5ee", map[string]any(nil), map[string]any{"a": float64(7.5)}},
+			}
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					dest := reflect.New(reflect.TypeOf(tt.initial))
+					dest.Elem().Set(reflect.ValueOf(tt.initial))
+					if err := decoder.run(tt.input, dest.Interface()); err != nil {
+						t.Fatal(err)
+					}
+					if got := dest.Elem().Interface(); !reflect.DeepEqual(got, tt.want) {
+						t.Fatalf("got %#v, want %#v", got, tt.want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkUnmarshalAll(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, sv := range unmarshalTests {
