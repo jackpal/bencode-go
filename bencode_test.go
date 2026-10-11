@@ -518,3 +518,69 @@ func TestRawMessagePointer(t *testing.T) {
 		t.Fatalf("Expected %q, got %q", input, buf.String())
 	}
 }
+
+func TestUnmarshalConcreteMapValues(t *testing.T) {
+	t.Run("int64", func(t *testing.T) {
+		var m map[string]int64
+		if err := Unmarshal(bytes.NewReader([]byte("d3:fooi42ee")), &m); err != nil {
+			t.Fatal(err)
+		}
+		if m["foo"] != 42 {
+			t.Fatalf("foo = %d", m["foo"])
+		}
+	})
+	t.Run("string", func(t *testing.T) {
+		var m map[string]string
+		if err := Unmarshal(bytes.NewReader([]byte("d3:bar3:bazee")), &m); err != nil {
+			t.Fatal(err)
+		}
+		if m["bar"] != "baz" {
+			t.Fatalf("bar = %q", m["bar"])
+		}
+	})
+	t.Run("uint8", func(t *testing.T) {
+		var m map[string]uint8
+		if err := Unmarshal(bytes.NewReader([]byte("d1:ai7ee")), &m); err != nil {
+			t.Fatal(err)
+		}
+		if m["a"] != 7 {
+			t.Fatalf("a = %d", m["a"])
+		}
+	})
+	t.Run("float32", func(t *testing.T) {
+		var m map[string]float32
+		if err := Unmarshal(bytes.NewReader([]byte("d1:ai3ee")), &m); err != nil {
+			t.Fatal(err)
+		}
+		if m["a"] != 3 {
+			t.Fatalf("a = %v", m["a"])
+		}
+	})
+	t.Run("slice", func(t *testing.T) {
+		var m map[string][]int
+		if err := Unmarshal(bytes.NewReader([]byte("d1:ali1ei2eee")), &m); err != nil {
+			t.Fatal(err)
+		}
+		if len(m["a"]) != 2 || m["a"][0] != 1 || m["a"][1] != 2 {
+			t.Fatalf("a = %v", m["a"])
+		}
+	})
+	t.Run("struct", func(t *testing.T) {
+		var m map[string]struct{ N int }
+		if err := Unmarshal(bytes.NewReader([]byte("d1:ad1:Ni9eee")), &m); err != nil {
+			t.Fatal(err)
+		}
+		if m["a"].N != 9 {
+			t.Fatalf("N = %d", m["a"].N)
+		}
+	})
+	t.Run("nested", func(t *testing.T) {
+		var m map[string]map[string]int
+		if err := Unmarshal(bytes.NewReader([]byte("d1:ad1:bi4eee")), &m); err != nil {
+			t.Fatal(err)
+		}
+		if m["a"]["b"] != 4 {
+			t.Fatalf("nested = %v", m)
+		}
+	})
+}
