@@ -518,3 +518,157 @@ func TestRawMessagePointer(t *testing.T) {
 		t.Fatalf("Expected %q, got %q", input, buf.String())
 	}
 }
+
+func TestUnmarshalMapConcreteElementTypes(t *testing.T) {
+	type subStruct struct {
+		Foo string
+		Bar int64
+	}
+
+	t.Run("map[string]int64", func(t *testing.T) {
+		var m map[string]int64
+		if err := Unmarshal(bytes.NewBufferString("d1:ai5ee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"] != 5 {
+			t.Fatalf("Expected 5, got %d", m["a"])
+		}
+	})
+
+	t.Run("map[string]uint8", func(t *testing.T) {
+		var m map[string]uint8
+		if err := Unmarshal(bytes.NewBufferString("d1:ai250ee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"] != 250 {
+			t.Fatalf("Expected 250, got %d", m["a"])
+		}
+	})
+
+	t.Run("map[string]float32", func(t *testing.T) {
+		var m map[string]float32
+		if err := Unmarshal(bytes.NewBufferString("d1:ai123ee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"] != 123 {
+			t.Fatalf("Expected 123, got %f", m["a"])
+		}
+	})
+
+	t.Run("map[string][]int", func(t *testing.T) {
+		var m map[string][]int
+		if err := Unmarshal(bytes.NewBufferString("d1:ali1ei2eee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if !reflect.DeepEqual(m["a"], []int{1, 2}) {
+			t.Fatalf("Expected [1 2], got %v", m["a"])
+		}
+	})
+
+	t.Run("map[string]struct", func(t *testing.T) {
+		var m map[string]subStruct
+		if err := Unmarshal(bytes.NewBufferString("d1:ad3:bari10e3:foo3:heyee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"].Foo != "hey" || m["a"].Bar != 10 {
+			t.Fatalf("Expected {Foo:hey Bar:10}, got %+v", m["a"])
+		}
+	})
+
+	t.Run("map[string]*struct", func(t *testing.T) {
+		var m map[string]*subStruct
+		if err := Unmarshal(bytes.NewBufferString("d1:ad3:bari20e3:foo3:yooee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"] == nil || m["a"].Foo != "yoo" || m["a"].Bar != 20 {
+			t.Fatalf("Expected &{Foo:yoo Bar:20}, got %+v", m["a"])
+		}
+	})
+
+	t.Run("map[string]map[string]string", func(t *testing.T) {
+		var m map[string]map[string]string
+		if err := Unmarshal(bytes.NewBufferString("d1:ad1:k1:vee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"]["k"] != "v" {
+			t.Fatalf("Expected 'v', got %q", m["a"]["k"])
+		}
+	})
+
+	t.Run("map[string]RawMessage", func(t *testing.T) {
+		var m map[string]RawMessage
+		if err := Unmarshal(bytes.NewBufferString("d1:ai5ee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if string(m["a"]) != "i5e" {
+			t.Fatalf("Expected 'i5e', got %q", string(m["a"]))
+		}
+	})
+
+	t.Run("map[string]*RawMessage", func(t *testing.T) {
+		var m map[string]*RawMessage
+		if err := Unmarshal(bytes.NewBufferString("d1:ai5ee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"] == nil || string(*m["a"]) != "i5e" {
+			t.Fatalf("Expected 'i5e', got %v", m["a"])
+		}
+	})
+
+	t.Run("existing entries preserved", func(t *testing.T) {
+		m := map[string]subStruct{"a": {Foo: "orig", Bar: 1}, "b": {Foo: "keep", Bar: 2}}
+		if err := Unmarshal(bytes.NewBufferString("d1:ad3:bari10eee"), &m); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
+		}
+		if m["a"].Foo != "orig" || m["a"].Bar != 10 {
+			t.Fatalf("Expected a to have Foo:orig Bar:10, got %+v", m["a"])
+		}
+		if m["b"].Foo != "keep" || m["b"].Bar != 2 {
+			t.Fatalf("Expected b to be preserved, got %+v", m["b"])
+		}
+	})
+}
+
+func TestUnmarshalMapAnyString(t *testing.T) {
+	var m map[string]any
+	if err := Unmarshal(bytes.NewBufferString("d1:a3:newe"), &m); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if m["a"] != "new" {
+		t.Fatalf("Expected 'new', got %v", m["a"])
+	}
+}
+
+func TestUnmarshalMapNoPrematureZeroEntry(t *testing.T) {
+	// Truncated right after key
+	m := make(map[string]string)
+	err := Unmarshal(bytes.NewBufferString("d1:a"), &m)
+	if err == nil {
+		t.Fatal("Expected error on truncated input")
+	}
+	if len(m) != 0 {
+		t.Fatalf("Expected empty map on truncated input, got %+v", m)
+	}
+
+	// Truncated after first valid entry and second key
+	m2 := make(map[string]int64)
+	err = Unmarshal(bytes.NewBufferString("d1:ai1e1:b"), &m2)
+	if err == nil {
+		t.Fatal("Expected error on truncated input")
+	}
+	if len(m2) != 1 || m2["a"] != 1 {
+		t.Fatalf("Expected map with only 'a':1, got %+v", m2)
+	}
+}
+
+func TestUnmarshalMapParseErrorNoFlush(t *testing.T) {
+	// Malformed value does not commit zero entry
+	m := make(map[string]int64)
+	err := Unmarshal(bytes.NewBufferString("d1:aixee"), &m)
+	if err == nil {
+		t.Fatal("Expected error on malformed value")
+	}
+	if len(m) != 0 {
+		t.Fatalf("Expected empty map on malformed value error, got %+v", m)
+	}
+}

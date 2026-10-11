@@ -55,11 +55,11 @@ type rawBuilder interface {
 // Deprecated: This type is currently unused. It is exposed for backwards
 // compatability. The public API that previously used this type,
 //
-//    Unmarshal(r Reader, val any) (err error)
+//	Unmarshal(r Reader, val any) (err error)
 //
 // is now
 //
-//    Unmarshal(r io.Reader, val any) (err error)
+//	Unmarshal(r io.Reader, val any) (err error)
 //
 // Which is compatible, since any Reader is also an io.Reader.
 // Clients should drop their use of this type. It may be removed in the future.
@@ -407,7 +407,9 @@ func parseFromReader(r *bufio.Reader, build builder, state *decodeState) (err er
 		err = fmt.Errorf("Unexpected character: '%v'", c)
 	}
 exit:
-	build.Flush()
+	if err == nil {
+		build.Flush()
+	}
 	return
 }
 

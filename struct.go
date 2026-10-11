@@ -126,8 +126,12 @@ func (b *structBuilder) Int64(i int64) {
 		return
 	}
 	if !b.val.CanSet() {
-		x := 0
-		b.val = reflect.ValueOf(&x).Elem()
+		if b.val.IsValid() {
+			b.val = reflect.New(b.val.Type()).Elem()
+		} else {
+			x := int64(0)
+			b.val = reflect.ValueOf(&x).Elem()
+		}
 	}
 	v := b.val
 	if isfloat(v) {
@@ -142,8 +146,12 @@ func (b *structBuilder) Uint64(i uint64) {
 		return
 	}
 	if !b.val.CanSet() {
-		x := uint64(0)
-		b.val = reflect.ValueOf(&x).Elem()
+		if b.val.IsValid() {
+			b.val = reflect.New(b.val.Type()).Elem()
+		} else {
+			x := uint64(0)
+			b.val = reflect.ValueOf(&x).Elem()
+		}
 	}
 	v := b.val
 	if isfloat(v) {
@@ -158,8 +166,12 @@ func (b *structBuilder) Float64(f float64) {
 		return
 	}
 	if !b.val.CanSet() {
-		x := float64(0)
-		b.val = reflect.ValueOf(&x).Elem()
+		if b.val.IsValid() {
+			b.val = reflect.New(b.val.Type()).Elem()
+		} else {
+			x := float64(0)
+			b.val = reflect.ValueOf(&x).Elem()
+		}
 	}
 	v := b.val
 	if isfloat(v) {
@@ -183,7 +195,11 @@ func (b *structBuilder) String(s string) {
 		}
 		b.val.SetString(s)
 	case reflect.Interface:
-		b.val.Set(reflect.ValueOf(s))
+		if b.val.CanSet() {
+			b.val.Set(reflect.ValueOf(s))
+		} else {
+			b.val = reflect.ValueOf(s)
+		}
 	}
 }
 
@@ -240,11 +256,11 @@ func (b *structBuilder) Map() {
 	}
 	if v := b.val; v.Kind() == reflect.Ptr {
 		if v.IsNil() {
-			v.Set(reflect.Zero(v.Type().Elem()).Addr())
-			b.Flush()
+			v.Set(reflect.New(v.Type().Elem()))
 		}
-		b.map_ = reflect.Value{}
-		b.val = v.Elem()
+		if !b.map_.IsValid() {
+			b.val = v.Elem()
+		}
 	}
 	if v := b.val; v.Kind() == reflect.Map && v.IsNil() {
 		v.Set(reflect.MakeMap(v.Type()))
@@ -278,11 +294,11 @@ func (b *structBuilder) Key(k string) builder {
 		}
 		key := reflect.ValueOf(k)
 		elem := v.MapIndex(key)
-		if !elem.IsValid() {
-			v.SetMapIndex(key, reflect.Zero(t.Elem()))
-			elem = v.MapIndex(key)
+		val := reflect.New(t.Elem()).Elem()
+		if elem.IsValid() {
+			val.Set(elem)
 		}
-		return &structBuilder{val: elem, map_: v, key: key}
+		return &structBuilder{val: val, map_: v, key: key}
 	}
 	return nobuilder
 }
@@ -310,9 +326,9 @@ func (b *structBuilder) Key(k string) builder {
 //
 // unmarshalling the bencode syntax string
 //
-//	"d5:emailld5:where4:home4:addr15:gre@example.come\
-//  d5:where4:work4:addr12:gre@work.comee4:name14:Gr\
-//  ace R. Emlin7:address15:123 Main Streete"
+//		"d5:emailld5:where4:home4:addr15:gre@example.come\
+//	 d5:where4:work4:addr12:gre@work.comee4:name14:Gr\
+//	 ace R. Emlin7:address15:123 Main Streete"
 //
 // via Unmarshal(s, &r) is equivalent to assigning
 //
@@ -341,7 +357,6 @@ func (b *structBuilder) Key(k string) builder {
 //
 // To unmarshal a top-level bencode array, pass in a pointer to an empty
 // slice of the correct type.
-//
 func unmarshalValue(r io.Reader, v reflect.Value) (err error) {
 	return unmarshalValueWithState(r, v, &decodeState{opts: DefaultOptions()})
 }
@@ -652,11 +667,11 @@ func (sv stringValue) isValueNil() bool {
 // but can be specified in the struct field's tag value. The text of
 // the struct field's tag value is the key name. Examples:
 //
-//   // Field appears in bencode as key "Field".
-//   Field int
+//	// Field appears in bencode as key "Field".
+//	Field int
 //
-//   // Field appears in bencode as key "myName".
-//   Field int "myName"
+//	// Field appears in bencode as key "myName".
+//	Field int "myName"
 //
 // Anonymous struct fields are ignored.
 //
@@ -672,7 +687,6 @@ func (sv stringValue) isValueNil() bool {
 // Bencode cannot represent cyclic data structures and Marshal does not
 // handle them.  Passing cyclic structures to Marshal will result in
 // an infinite recursion.
-//
 func Marshal(w io.Writer, val any) error {
 	return writeValue(w, reflect.ValueOf(val))
 }
